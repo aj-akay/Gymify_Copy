@@ -1,5 +1,5 @@
 import express from 'express';
-import { getGymById, getGymFilterOptions, listGyms, openDatabase } from './database.js';
+import { getGymById, getGymFilterOptions, listGyms } from './catalog.js';
 
 const API_PREFIX = '/api/v1';
 
@@ -73,7 +73,6 @@ function sendError(response, status, code, message) {
 }
 
 export function createApp({
-  database = openDatabase(),
   corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173')
     .split(',')
     .map((origin) => origin.trim())
@@ -86,7 +85,12 @@ export function createApp({
 
   app.use((request, response, next) => {
     const origin = request.get('Origin');
-    if (origin && !allowedOrigins.has(origin)) {
+    const originUrl = origin && URL.canParse(origin) ? new URL(origin) : null;
+    const requestProtocol = request.get('x-forwarded-proto')?.split(',')[0].trim() || request.protocol;
+    const isSameOrigin = origin
+      && originUrl
+      && originUrl.origin === `${requestProtocol}://${request.get('host')}`;
+    if (origin && !allowedOrigins.has(origin) && !isSameOrigin) {
       sendError(response, 403, 'ORIGIN_NOT_ALLOWED', 'This origin is not allowed.');
       return;
     }
@@ -109,18 +113,18 @@ export function createApp({
 
   app.get(`${API_PREFIX}/gyms`, (request, response) => {
     const parameters = new URL(request.originalUrl, 'http://localhost').searchParams;
-    response.json({ data: listGyms(database, parseGymFilters(parameters)) });
+    response.json({ data: listGyms(parseGymFilters(parameters)) });
   });
 
   app.get(`${API_PREFIX}/gyms/options`, (request, response) => {
     if (request.query && Object.keys(request.query).length > 0) {
       throw new RequestError(400, 'INVALID_QUERY', 'The filters endpoint does not accept query parameters.');
     }
-    response.json({ data: getGymFilterOptions(database) });
+    response.json({ data: getGymFilterOptions() });
   });
 
   app.get(`${API_PREFIX}/gyms/:id`, (request, response) => {
-    const gym = getGymById(database, request.params.id);
+    const gym = getGymById(request.params.id);
     if (!gym) {
       sendError(response, 404, 'GYM_NOT_FOUND', 'No gym was found with that ID.');
       return;

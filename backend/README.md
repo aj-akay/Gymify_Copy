@@ -1,6 +1,6 @@
 # GYMIFY API
 
-Read-only REST API for the gym discovery, directory, detail, and comparison screens in the GYMIFY frontend. The backend uses Express and `better-sqlite3`. It requires Node.js 20.19 or newer.
+Read-only REST API for the gym discovery, directory, detail, and comparison screens in the GYMIFY frontend. The backend uses Express and the bundled sample catalogue, and requires Node.js 20.19 or newer.
 
 All seeded gyms are clearly marked sample listings. The API is public and read-only because the current frontend has no account, login, or gym-management workflow.
 
@@ -23,13 +23,12 @@ npm install
 npm run dev
 ```
 
-The API listens on `http://localhost:4000` by default. It creates the SQLite database, applies pending SQL migrations, and seeds the six sample gyms on first start. The `data/` directory is ignored by Git.
+The API listens on `http://localhost:4000` by default and serves the six sample gyms from `src/data/sample-gyms.js`.
 
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `4000` | HTTP port |
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated browser origins allowed to call the API |
-| `GYMIFY_DATABASE_PATH` | `backend/data/gymify.sqlite` | SQLite database file; relative paths resolve from the backend working directory |
 
 Use `backend/.env.example` as the environment template. Do not commit `.env` files.
 
@@ -65,7 +64,7 @@ GET /api/v1/gyms?q=strength&budget=1500&equipment=Free%20weights&amenities=Parki
 
 ### `GET /gyms/options`
 
-Returns alphabetized equipment and amenity values from their database catalogues for the directory filter controls.
+Returns alphabetized equipment and amenity values from the sample catalogue for the directory filter controls.
 
 ### `GET /gyms/:id`
 
@@ -73,26 +72,14 @@ Returns one gym by its slug. Returns `404` with error code `GYM_NOT_FOUND` if th
 
 Invalid filters return `400`; unsupported HTTP methods return `405`; unconfigured browser origins return `403`. Database failures are logged on the server and return a generic `500` response.
 
-## Database
-
-Schema migration: `database/migrations/001-initial.sql`. SQLite foreign keys are enabled. The schema contains:
-
-- `gyms`: core listing information and display order.
-- `equipment` and `amenities`: unique names for reusable catalogue values.
-- `gym_equipment` and `gym_amenities`: composite-key join tables with foreign keys.
-
-Sample seed records are maintained in `src/data/sample-gyms.js`. Existing databases are not reseeded or overwritten on restart. Schema changes should be made in a new, incrementally numbered migration and applied before seeding or serving requests.
-
 ## Tests
 
 ```sh
 npm test
 ```
 
-Tests use Node's built-in test runner, an in-memory SQLite database, and a local ephemeral HTTP port. They cover seeded records, filters, sorting, gym detail, error responses, methods, and CORS.
+Tests use Node's built-in test runner and a local ephemeral HTTP port. They cover sample records, filters, sorting, gym detail, error responses, methods, and same-origin/CORS behavior.
 
-## Deployment note
+## Deployment
 
-SQLite is appropriate for local development and a small persistent-volume host. Do not use the default file database on an ephemeral or serverless filesystem; use persistent disk or migrate to a managed relational database before production deployment. Set `CORS_ORIGINS` to the exact HTTPS frontend origin and provide the frontend's `VITE_API_BASE_URL` at build time.
-
-For a demo deployment, the repository's `render.yaml` configures a free Render web service. Its ephemeral disk is acceptable only for the existing read-only sample listings, which are seeded again when the service starts. Configure `CORS_ORIGINS` with the deployed frontend's exact origin in Render and set the Vercel build variable `VITE_API_BASE_URL` to the Render API URL ending in `/api/v1`. Do not store user-submitted or important data in this SQLite deployment.
+The root `api/[...path].js` function serves this API on Vercel alongside the Vite frontend. Both use the same bundled sample catalogue, so a deployment does not require a database or separate API host. The catalogue is read-only and changes only when the code is redeployed. If gyms later need to be created or edited at runtime, migrate the catalogue to managed Postgres before adding write endpoints.

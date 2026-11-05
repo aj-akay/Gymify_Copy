@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { after, before, test } from 'node:test';
-import { createApp } from '../src/app.js';
-import { openDatabase } from '../src/database.js';
+import vercelApi from '../../api/[...path].js';
 
-const database = openDatabase(':memory:');
-const app = createApp({ database, logger: { error() {} } });
+const app = vercelApi;
 let server;
 
 before(async () => {
@@ -16,7 +14,6 @@ before(async () => {
 after(async () => {
   server.close();
   await once(server, 'close');
-  database.close();
 });
 
 function apiUrl(path) {
@@ -91,4 +88,17 @@ test('invalid filters, methods, and unconfigured browser origins are rejected', 
 
   const blockedOrigin = await fetch(apiUrl('/gyms'), { headers: { Origin: 'https://untrusted.example' } });
   assert.equal(blockedOrigin.status, 403);
+});
+
+test('same-origin deployments do not require a CORS allowlist', async () => {
+  const host = `127.0.0.1:${server.address().port}`;
+  const response = await fetch(apiUrl('/health'), {
+    headers: { Origin: `http://${host}` },
+  });
+  assert.equal(response.status, 200);
+
+  const wrongScheme = await fetch(apiUrl('/health'), {
+    headers: { Origin: `https://${host}` },
+  });
+  assert.equal(wrongScheme.status, 403);
 });

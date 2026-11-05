@@ -13,15 +13,16 @@
     "backend:test": "npm --prefix backend test"
   },
   "dependencies": {
+    "express": "5.1.0",
+    "lucide-react": "^0.468.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-router-dom": "^7.6.0",
-    "lucide-react": "^0.468.0"
+    "react-router-dom": "^7.6.0"
   },
   "devDependencies": {
-    "vite": "^6.3.5",
+    "@tailwindcss/vite": "^4.1.0",
     "@vitejs/plugin-react": "^4.5.0",
     "tailwindcss": "^4.1.0",
-    "@tailwindcss/vite": "^4.1.0"
+    "vite": "^6.3.5"
   }
 }

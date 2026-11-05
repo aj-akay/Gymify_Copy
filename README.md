@@ -1,6 +1,6 @@
 # GYMIFY
 
-Responsive gym-discovery app for Naga City, Philippines. The React/Vite frontend reads gym listings from a separately runnable Node.js API backed by SQLite. Listings are seeded sample data, not verified businesses.
+Responsive gym-discovery app for Naga City, Philippines. The React/Vite frontend reads illustrative, read-only gym listings from a Node.js API. The API uses bundled sample data, so the complete app can deploy as one Vercel project without a database service.
 
 ## Requirements
 
@@ -23,13 +23,11 @@ Copy-Item .env.example .env.local
 npm run dev
 ```
 
-Open the Vite URL printed in the terminal (usually `http://localhost:5173`). In development, Vite proxies `/api` requests to the backend on port `4000`, so `VITE_API_BASE_URL` can remain blank. The API initializes and seeds the SQLite database on startup.
-
-The backend creates `backend/data/gymify.sqlite`, applies its SQL migration, and seeds the six sample listings on first startup. The database file and environment files are ignored by Git.
+Open the Vite URL printed in the terminal (usually `http://localhost:5173`). In development, Vite proxies `/api` requests to the backend on port `4000`, so `VITE_API_BASE_URL` can remain blank.
 
 ## Backend
 
-The backend is an Express API using SQLite. Read-only endpoints serve the features currently present in the frontend:
+The backend is a read-only Express API. The Vercel function in `api/` and the local Express server use the same bundled sample catalogue and endpoints:
 
 - `GET /api/v1/health`
 - `GET /api/v1/gyms`
@@ -44,20 +42,29 @@ From the backend directory, run API tests with:
 npm test
 ```
 
-For direct backend setup and the complete endpoint and schema reference, see [backend/README.md](./backend/README.md).
+For direct backend setup and the complete endpoint reference, see [backend/README.md](./backend/README.md).
 
-## Deploy frontend and API
+## Deploy frontend and API together to Vercel
 
-The repository includes a Render Blueprint in `render.yaml` for the API. To publish the site:
+The root project is configured for a single Vercel deployment: Vercel builds the Vite frontend and serves the Express API from `api/[...path].js` at the same origin. No Render service, SQLite file, database integration, CORS setup, or `VITE_API_BASE_URL` variable is needed.
 
-1. Push the repository to GitHub.
-2. In Render, choose **New → Blueprint**, select this GitHub repository, and deploy the `gymify-api` service defined in `render.yaml`. Copy its public URL, for example `https://gymify-api.onrender.com`.
-3. In Vercel, import the same GitHub repository. Keep the project root at `./`, use `npm run build` (or `pnpm build`) as the build command, and `dist` as the output directory.
-4. In Vercel project **Settings → Environment Variables**, add `VITE_API_BASE_URL` with the Render URL plus `/api/v1` (for example `https://gymify-api.onrender.com/api/v1`) for Production. Add it for Preview too if you use preview deployments, then redeploy.
-5. After Vercel assigns the frontend URL, open the Render service **Environment** settings and set `CORS_ORIGINS` to `http://localhost:5173,https://your-project.vercel.app` (replace the example domain with the exact Vercel domain). Save and redeploy/restart the API.
-6. Check `https://your-api.onrender.com/api/v1/health` and `https://your-project.vercel.app`. The site should show the seeded sample gyms.
+1. Push the repository to GitHub and import it in Vercel.
+2. Keep the project root at `./`, select **Vite** if prompted, and deploy with the default install/build settings (`pnpm build`, output directory `dist`).
+3. Open the Vercel deployment URL. The frontend calls `/api/v1` on that same domain; check `/api/v1/health` to verify the API.
 
-The first request to a free Render service may take a little while if it has been idle. This setup is for the current read-only sample listings: Render's free filesystem is temporary, so the SQLite database can be recreated on restart and seeded again. Do not use this deployment to store important or user-submitted data without moving to persistent database storage.
+The current catalogue contains only six read-only sample gyms, so it is bundled with the API. To update those samples, edit `backend/src/data/sample-gyms.js` and redeploy. This approach does not persist data changes or support user-submitted listings; add a managed database such as Postgres when the app needs dynamic records.
+
+## Deploy frontend to GitHub Pages
+
+The `.github/workflows/deploy-pages.yml` workflow builds the app with the repository subpath and hash-based routes, then publishes it to GitHub Pages. This avoids blank pages from root-relative asset paths and supports refreshing nested routes.
+
+1. In GitHub, open the repository **Settings → Pages** and set **Build and deployment → Source** to **GitHub Actions**.
+2. Under **Settings → Secrets and variables → Actions → Variables**, add `VITE_API_BASE_URL` with the Vercel deployment URL ending in `/api/v1` (for example `https://your-project.vercel.app/api/v1`).
+3. Go to **Actions**, enable workflows if asked, and run **Deploy to GitHub Pages** (or push a commit to `main`).
+4. Open `https://aj-akay.github.io/Gymify_Copy/`. The routes use a `#`, such as `/Gymify_Copy/#/gyms`.
+5. In Vercel project **Settings → Environment Variables**, set `CORS_ORIGINS` to `http://localhost:5173,https://aj-akay.github.io` and redeploy.
+
+GitHub Pages hosts only the static frontend; it does not run the Express API. Set the Actions variable `VITE_API_BASE_URL` to a separately hosted API URL ending in `/api/v1` to load listings there.
 
 ## Frontend build and preview
 
@@ -66,7 +73,7 @@ npm run build
 npm run preview
 ```
 
-For local development, leave `VITE_API_BASE_URL` blank; Vite proxies API requests to the local backend. Production builds require the deployed HTTPS API URL and show a clear configuration error if it is missing rather than silently requesting `localhost`.
+For local development, leave `VITE_API_BASE_URL` blank; Vite proxies API requests to the local backend. Vercel production builds use the same-origin `/api/v1` route by default. GitHub Pages builds require a separately hosted API URL.
 
 ## Data and scope
 
@@ -76,7 +83,7 @@ Gym names, locations, rates, hours, and photos are illustrative. No gym contacts
 
 Public gym browsing stays available without an account. Comparing and saving gyms now require sign-in. Login/signup/recovery screens and saved-gym UI are prepared for the team's API. The owner partnership page contains a basic inquiry form. Both integrations are **off by default** and explicitly labeled as previews until backend endpoints exist. The existing read-only backend is unchanged.
 
-See [docs/FRONTEND_API.md](docs/FRONTEND_API.md) for the proposed endpoints, response shapes, feature flags, and integration checklist. The former hosted-form URL setting is superseded by the inline inquiry form.
+See [docs/FRONTEND_API.md](docs/FRONTEND_API.md) for the proposed endpoints, response shapes, feature flags, and integration checklist. The gym catalogue API remains read-only; member and inquiry APIs are not implemented. The former hosted-form URL setting is superseded by the inline inquiry form.
 
 ### Change spacing yourself
 

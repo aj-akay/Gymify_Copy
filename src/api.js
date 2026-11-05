@@ -1,5 +1,6 @@
 export const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? '/api/v1' : '')
+  import.meta.env.VITE_API_BASE_URL
+  || (import.meta.env.DEV || import.meta.env.VITE_GITHUB_PAGES !== 'true' ? '/api/v1' : '')
 ).replace(/\/+$/, '');
 
 class ApiError extends Error {
@@ -13,7 +14,7 @@ class ApiError extends Error {
 
 export async function fetchApi(path, { signal } = {}) {
   if (!API_BASE_URL) {
-    throw new Error('Set VITE_API_BASE_URL to the deployed GYMIFY API URL before building the production frontend.');
+    throw new Error('Set VITE_API_BASE_URL to the deployed GYMIFY API URL before building the frontend.');
   }
 
   let response;

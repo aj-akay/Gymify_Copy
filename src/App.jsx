@@ -1,7 +1,7 @@
 import GymDataState from './components/GymDataState';
 import { GymsProvider } from './contexts/GymsContext';
 import { useState } from 'react';
-import { BrowserRouter, Routes, Route, Link, useNavigate } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Routes, Route, Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, X } from 'lucide-react';
 import { CompareContext } from './contexts/CompareContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -17,6 +17,8 @@ import Compare from './pages/Compare';
 import Partners from './pages/Partners';
 import AuthPage from './pages/AuthPage';
 import Saved from './pages/Saved';
+
+const AppRouter = import.meta.env.VITE_GITHUB_PAGES === 'true' ? HashRouter : BrowserRouter;
 
 function AppRoutes() {
   const navigate = useNavigate();
@@ -56,5 +58,5 @@ function AppRoutes() {
 }
 
 export default function App() {
-  return <GymsProvider><AuthProvider><SavedProvider><BrowserRouter><AppRoutes /></BrowserRouter></SavedProvider></AuthProvider></GymsProvider>;
+  return <GymsProvider><AuthProvider><SavedProvider><AppRouter><AppRoutes /></AppRouter></SavedProvider></AuthProvider></GymsProvider>;
 }
