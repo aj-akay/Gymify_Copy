@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { gyms } from "../data/gyms";
 
 export default function ScrollTop() {
   const {

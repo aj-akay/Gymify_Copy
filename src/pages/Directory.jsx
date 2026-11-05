@@ -1,11 +1,11 @@
+import { useGyms } from '../contexts/GymsContext';
 import { useState } from 'react';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
-import { gyms, equipmentOptions, amenityOptions } from "../data/gyms";
 import SampleNote from '../components/SampleNote.jsx';
 import GymCard from '../components/GymCard.jsx';
-import Compare from './Compare.jsx';
 
 export default function Directory() {
+  const { gyms, equipmentOptions, amenityOptions } = useGyms();
   const [q, setQ] = useState(() => new URLSearchParams(location.search).get('q') || '');
   const [budget, setBudget] = useState('');
   const [equipment, setEquipment] = useState([]);
