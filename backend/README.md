@@ -94,3 +94,5 @@ Tests use Node's built-in test runner, an in-memory SQLite database, and a local
 ## Deployment note
 
 SQLite is appropriate for local development and a small persistent-volume host. Do not use the default file database on an ephemeral or serverless filesystem; use persistent disk or migrate to a managed relational database before production deployment. Set `CORS_ORIGINS` to the exact HTTPS frontend origin and provide the frontend's `VITE_API_BASE_URL` at build time.
+
+For a demo deployment, the repository's `render.yaml` configures a free Render web service. Its ephemeral disk is acceptable only for the existing read-only sample listings, which are seeded again when the service starts. Configure `CORS_ORIGINS` with the deployed frontend's exact origin in Render and set the Vercel build variable `VITE_API_BASE_URL` to the Render API URL ending in `/api/v1`. Do not store user-submitted or important data in this SQLite deployment.

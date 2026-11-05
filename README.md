@@ -46,6 +46,19 @@ npm test
 
 For direct backend setup and the complete endpoint and schema reference, see [backend/README.md](./backend/README.md).
 
+## Deploy frontend and API
+
+The repository includes a Render Blueprint in `render.yaml` for the API. To publish the site:
+
+1. Push the repository to GitHub.
+2. In Render, choose **New → Blueprint**, select this GitHub repository, and deploy the `gymify-api` service defined in `render.yaml`. Copy its public URL, for example `https://gymify-api.onrender.com`.
+3. In Vercel, import the same GitHub repository. Keep the project root at `./`, use `npm run build` (or `pnpm build`) as the build command, and `dist` as the output directory.
+4. In Vercel project **Settings → Environment Variables**, add `VITE_API_BASE_URL` with the Render URL plus `/api/v1` (for example `https://gymify-api.onrender.com/api/v1`) for Production. Add it for Preview too if you use preview deployments, then redeploy.
+5. After Vercel assigns the frontend URL, open the Render service **Environment** settings and set `CORS_ORIGINS` to `http://localhost:5173,https://your-project.vercel.app` (replace the example domain with the exact Vercel domain). Save and redeploy/restart the API.
+6. Check `https://your-api.onrender.com/api/v1/health` and `https://your-project.vercel.app`. The site should show the seeded sample gyms.
+
+The first request to a free Render service may take a little while if it has been idle. This setup is for the current read-only sample listings: Render's free filesystem is temporary, so the SQLite database can be recreated on restart and seeded again. Do not use this deployment to store important or user-submitted data without moving to persistent database storage.
+
 ## Frontend build and preview
 
 ```sh
@@ -53,7 +66,7 @@ npm run build
 npm run preview
 ```
 
-The existing Vercel configuration serves the frontend as a single-page app; it does not deploy the backend. Deploy the API separately, set its HTTPS URL as `VITE_API_BASE_URL` in the frontend build environment, and configure the API's `CORS_ORIGINS` to the frontend origin. Production builds now show a clear configuration error rather than silently requesting `localhost`. SQLite requires persistent disk storage, so use a persistent-volume host for the API or migrate to a managed relational database before deploying to an ephemeral/serverless runtime.
+For local development, leave `VITE_API_BASE_URL` blank; Vite proxies API requests to the local backend. Production builds require the deployed HTTPS API URL and show a clear configuration error if it is missing rather than silently requesting `localhost`.
 
 ## Data and scope
 
