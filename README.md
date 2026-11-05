@@ -1,54 +1,68 @@
 # GYMIFY
 
-Responsive frontend MVP for sample gym discovery in Naga City, Philippines. Built with React, Vite, Tailwind CSS, React Router, and Lucide React.
+Responsive gym-discovery app for Naga City, Philippines. The React/Vite frontend reads gym listings from a separately runnable Node.js API backed by SQLite. Listings are seeded sample data, not verified businesses.
 
-## Local setup
+## Requirements
 
-Requires Node.js 20.19+ or 22.12+ and npm (or pnpm).
+- Node.js 20.19 or later.
+- npm, or pnpm for the frontend.
+
+## Local development
+
+Install the frontend dependencies from the repository root:
 
 ```sh
 npm install
+```
+
+In the first terminal, start the API:
+
+```powershell
+cd backend
+npm install
+Copy-Item .env.example .env
 npm run dev
 ```
 
-Open the local URL printed by Vite. Production checks:
+In a second terminal, start Vite:
+
+```powershell
+Copy-Item .env.example .env.local
+npm run dev
+```
+
+Open the local URL printed by Vite. The frontend defaults to `http://localhost:4000/api/v1`; set `VITE_API_BASE_URL` in `.env.local` if the API runs elsewhere. The API permits the Vite origin at `http://localhost:5173` by default; configure `CORS_ORIGINS` in `backend/.env` for another origin.
+
+The backend creates `backend/data/gymify.sqlite`, applies its SQL migration, and seeds the six sample listings on first startup. The database file and environment files are ignored by Git.
+
+## Backend
+
+The backend is an Express API using SQLite. Read-only endpoints serve the features currently present in the frontend:
+
+- `GET /api/v1/health`
+- `GET /api/v1/gyms`
+- `GET /api/v1/gyms/options`
+- `GET /api/v1/gyms/:id`
+
+Gym listing filters include `q`, `budget`, repeated `equipment` and `amenities`, `sort=featured|low|high`, `featured=true|false`, and repeated or comma-separated `ids`. Selected equipment and amenities use AND matching.
+
+From the backend directory, run API tests with:
+
+```sh
+npm test
+```
+
+For direct backend setup and the complete endpoint and schema reference, see [backend/README.md](./backend/README.md).
+
+## Frontend build and preview
 
 ```sh
 npm run build
 npm run preview
 ```
 
-You can use `pnpm install`, `pnpm dev`, and `pnpm build` instead. The included pnpm lockfile records dependency versions.
+The existing Vercel configuration serves the frontend as a single-page app. Deploy the API separately and set its HTTPS URL as `VITE_API_BASE_URL`; configure the API's `CORS_ORIGINS` to the frontend origin. SQLite requires persistent disk storage, so use a persistent-volume host for the API or migrate to a managed relational database before deploying to an ephemeral/serverless runtime.
 
-## Deploy to Vercel
+## Data and scope
 
-1. Push this repository to your Git provider.
-2. Import it as a new Vercel project and select the Vite preset.
-3. Use `npm run build` (or `pnpm build`) as the build command and `dist` as the output directory.
-4. Deploy. `vercel.json` rewrites application routes to `index.html` so detail pages and other direct links work.
-
-This repository does not imply an existing deployment.
-
-## Data and configuration
-
-All six fictional gym entries and image references live in `src/data/gyms.js`. Names, locations, rates, hours, equipment, amenities, and stock photographs are illustrative, not verified facts. There are no reviews, real partnerships, booking, authentication, or payments. Google Maps links search a neighborhood rather than claiming an exact venue location. Images load from Unsplash; a local system font fallback works if Google Fonts is unavailable.
-
-Replace the sample data with verified information before launch. Set each gym's `contactUrl` to a verified public contact URL to enable its contact action. Add additional validated fields as needed; there are no fabricated contact details.
-
-The partnership page intentionally has no inactive submission form. To connect a hosted inquiry form, set `VITE_PARTNER_FORM_URL` to an HTTPS URL in `.env.local` or Vercel's environment variables, then rebuild. Vite variables are public: never put secrets in them. Without this setting, the page clearly identifies the inquiry channel as an unconnected demo.
-
-## Behavior
-
-- Directory search matches name, neighborhood, and category; selected equipment and amenities use AND matching.
-- Monthly budget filters and price sorting operate on numeric sample rates.
-- Comparison supports 2–3 gyms, persists selected IDs in localStorage, and explains the selection limit.
-- Distance sorting is intentionally absent: verified coordinates and geolocation calculations are not supplied.
-- Data is synchronous and local; no artificial loading state or spinner is needed. Image space is reserved while images load. Search empty, missing gym, and unknown route states are implemented.
-- Responsive navigation, labeled controls, keyboard focus indicators, skip navigation, semantic comparison table, and reduced-motion support are included.
-
-## Project structure
-
-- `src/data/gyms.js`: replaceable sample data and formatting helpers
-- `src/main.jsx`: routes, reusable cards/navigation, directory, detail, comparison and partnership experiences
-- `src/styles.css`: Tailwind entry and responsive visual system
-- `vercel.json`: SPA route fallback
+Gym names, locations, rates, hours, and photos are illustrative. No gym contacts, booking, payments, authentication, user profiles, or listing-management screens are part of the current UI, so the API does not expose write or account endpoints. Add verified data and an appropriate owner/admin workflow before accepting real listings or enabling management operations.
