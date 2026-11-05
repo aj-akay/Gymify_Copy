@@ -66,3 +66,22 @@ The existing Vercel configuration serves the frontend as a single-page app. Depl
 ## Data and scope
 
 Gym names, locations, rates, hours, and photos are illustrative. No gym contacts, booking, payments, authentication, user profiles, or listing-management screens are part of the current UI, so the API does not expose write or account endpoints. Add verified data and an appropriate owner/admin workflow before accepting real listings or enabling management operations.
+
+## Account and inquiry frontend (backend handoff)
+
+Public gym browsing stays available without an account. Comparing and saving gyms now require sign-in. Login/signup/recovery screens and saved-gym UI are prepared for the team's API. The owner partnership page contains a basic inquiry form. Both integrations are **off by default** and explicitly labeled as previews until backend endpoints exist. The existing read-only backend is unchanged.
+
+See [docs/FRONTEND_API.md](docs/FRONTEND_API.md) for the proposed endpoints, response shapes, feature flags, and integration checklist. The former hosted-form URL setting is superseded by the inline inquiry form.
+
+### Change spacing yourself
+
+Search `CUSTOMIZE SPACING HERE` in `src/styles.css`:
+
+- `--page-gutter`: horizontal space beside the main content.
+- `--page-space`: space above and below inner pages.
+- `--card-padding`: space inside gym cards, including the Save action.
+- `--panel-padding`: padding inside account and inquiry panels.
+- `--field-padding`: padding inside form inputs.
+- `--form-gap`: distance between form fields.
+
+For example, increase `--panel-padding` from `clamp(22px, 4vw, 40px)` to `clamp(26px, 4vw, 48px)`. The smallest number applies on narrow screens and the largest caps desktop padding. Layout-specific gaps still live in their named CSS classes. Save while the Vite server runs to see changes.
