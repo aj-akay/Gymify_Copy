@@ -1,10 +1,14 @@
 // Frontend contract only. Enable after your team implements docs/FRONTEND_API.md.
+import { API_BASE_URL } from '../api';
+
 export const memberApiEnabled = import.meta.env.VITE_MEMBER_API_ENABLED === 'true';
 export const inquiryApiEnabled = import.meta.env.VITE_INQUIRY_API_ENABLED === 'true';
-const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api/v1').replace(/\/+$/, '');
 
 export async function memberRequest(path, { method = 'GET', body, signal } = {}) {
-  const response = await fetch(`${base}${path}`, {
+  if (!API_BASE_URL) {
+    throw new Error('Set VITE_API_BASE_URL to the deployed GYMIFY API URL before building the production frontend.');
+  }
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
     credentials: 'include', // Your backend owns secure, HttpOnly session cookies.
     headers: body ? { 'Content-Type': 'application/json' } : undefined,

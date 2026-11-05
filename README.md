@@ -9,29 +9,21 @@ Responsive gym-discovery app for Naga City, Philippines. The React/Vite frontend
 
 ## Local development
 
-Install the frontend dependencies from the repository root:
+Install frontend and backend dependencies:
 
 ```sh
 npm install
+npm install --prefix backend
 ```
 
-In the first terminal, start the API:
-
-```powershell
-cd backend
-npm install
-Copy-Item .env.example .env
-npm run dev
-```
-
-In a second terminal, start Vite:
+Copy the optional local API settings, then start the API and frontend together:
 
 ```powershell
 Copy-Item .env.example .env.local
 npm run dev
 ```
 
-Open the local URL printed by Vite. The frontend defaults to `http://localhost:4000/api/v1`; set `VITE_API_BASE_URL` in `.env.local` if the API runs elsewhere. The API permits the Vite origin at `http://localhost:5173` by default; configure `CORS_ORIGINS` in `backend/.env` for another origin.
+Open the Vite URL printed in the terminal (usually `http://localhost:5173`). In development, Vite proxies `/api` requests to the backend on port `4000`, so `VITE_API_BASE_URL` can remain blank. The API initializes and seeds the SQLite database on startup.
 
 The backend creates `backend/data/gymify.sqlite`, applies its SQL migration, and seeds the six sample listings on first startup. The database file and environment files are ignored by Git.
 
@@ -61,7 +53,7 @@ npm run build
 npm run preview
 ```
 
-The existing Vercel configuration serves the frontend as a single-page app. Deploy the API separately and set its HTTPS URL as `VITE_API_BASE_URL`; configure the API's `CORS_ORIGINS` to the frontend origin. SQLite requires persistent disk storage, so use a persistent-volume host for the API or migrate to a managed relational database before deploying to an ephemeral/serverless runtime.
+The existing Vercel configuration serves the frontend as a single-page app; it does not deploy the backend. Deploy the API separately, set its HTTPS URL as `VITE_API_BASE_URL` in the frontend build environment, and configure the API's `CORS_ORIGINS` to the frontend origin. Production builds now show a clear configuration error rather than silently requesting `localhost`. SQLite requires persistent disk storage, so use a persistent-volume host for the API or migrate to a managed relational database before deploying to an ephemeral/serverless runtime.
 
 ## Data and scope
 

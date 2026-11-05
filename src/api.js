@@ -1,5 +1,6 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api/v1')
-  .replace(/\/+$/, '');
+export const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? '/api/v1' : '')
+).replace(/\/+$/, '');
 
 class ApiError extends Error {
   constructor(message, status, code) {
@@ -11,6 +12,10 @@ class ApiError extends Error {
 }
 
 export async function fetchApi(path, { signal } = {}) {
+  if (!API_BASE_URL) {
+    throw new Error('Set VITE_API_BASE_URL to the deployed GYMIFY API URL before building the production frontend.');
+  }
+
   let response;
   try {
     response = await fetch(`${API_BASE_URL}${path}`, { signal });
