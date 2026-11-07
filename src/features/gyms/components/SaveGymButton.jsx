@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Bookmark, BookmarkCheck } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { useSavedGyms } from '../contexts/SavedContext';
+import { useAuth } from '../../auth/context/AuthContext';
+import { useSavedGyms } from '../context/SavedContext';
 
 export default function SaveGymButton({ gym }) {
   const { user, loading: sessionLoading } = useAuth();

@@ -3,12 +3,26 @@ services:
     name: gymify-api
     runtime: node
     plan: free
-    rootDir: backend
-    buildCommand: npm ci
-    startCommand: npm start
+    rootDir: .
+    buildCommand: corepack pnpm install --frozen-lockfile
+    startCommand: npm run backend:start
     healthCheckPath: /api/v1/health
     envVars:
       - key: NODE_VERSION
-        value: 22.14.0
+        value: 22.15.0
       - key: CORS_ORIGINS
-        value: http://localhost:5173,https://aj-akay.github.io
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PREMIUM_PRICE_ID
+        sync: false

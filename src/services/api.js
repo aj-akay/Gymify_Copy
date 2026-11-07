@@ -14,7 +14,7 @@ class ApiError extends Error {
 
 export async function fetchApi(path, { signal } = {}) {
   if (!API_BASE_URL) {
-    throw new Error('Set VITE_API_BASE_URL to the deployed GYMIFY API URL before building the frontend.');
+    throw new Error('Set VITE_API_BASE_URL to a hosted GYMIFY API URL before building for GitHub Pages.');
   }
 
   let response;

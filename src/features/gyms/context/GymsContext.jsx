@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { fetchApi } from '../api';
+import { fetchApi } from '../../../services/api';
 
 const GymsContext = createContext(null);
 export const useGyms = () => useContext(GymsContext);

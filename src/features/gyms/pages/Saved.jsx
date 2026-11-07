@@ -1,6 +1,6 @@
-import { useGyms } from '../contexts/GymsContext';
+import { useGyms } from '../context/GymsContext';
 import { Link } from 'react-router-dom';
-import { useSavedGyms } from '../contexts/SavedContext';
+import { useSavedGyms } from '../context/SavedContext';
 import GymCard from '../components/GymCard';
 
 export default function Saved() {

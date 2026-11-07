@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { useAuth } from './AuthContext';
-import { memberRequest } from '../services/memberApi';
+import { useAuth } from '../../auth/context/AuthContext';
+import { memberRequest } from '../../../services/memberApi';
 
 const SavedContext = createContext(null);
 export const useSavedGyms = () => useContext(SavedContext);

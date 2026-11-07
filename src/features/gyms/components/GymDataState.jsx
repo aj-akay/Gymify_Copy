@@ -1,4 +1,4 @@
-import { useGyms } from '../contexts/GymsContext';
+import { useGyms } from '../context/GymsContext';
 
 export default function GymDataState({ children }) {
   const { loading, error, retry } = useGyms();

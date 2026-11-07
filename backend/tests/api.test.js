@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { after, before, test } from 'node:test';
-import vercelApi from '../../api/[...path].js';
+import { createApp } from '../src/app.js';
 
-const app = vercelApi;
+const app = createApp({ logger: { error() {} } });
 let server;
 
 before(async () => {
@@ -20,85 +20,66 @@ function apiUrl(path) {
   return `http://127.0.0.1:${server.address().port}/api/v1${path}`;
 }
 
-test('health endpoint responds with a consistent success envelope', async () => {
+test('health endpoint responds without requiring paid service credentials', async () => {
   const response = await fetch(apiUrl('/health'));
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { data: { status: 'ok' } });
 });
 
-test('gym listings include all six seeded records with related data', async () => {
-  const response = await fetch(apiUrl('/gyms'));
-  const { data } = await response.json();
-  assert.equal(response.status, 200);
-  assert.equal(data.length, 6);
-  assert.equal(data[0].id, 'forge-fitness');
-  assert.equal(data[0].sample, true);
-  assert.ok(data[0].equipment.includes('Squat racks'));
-  assert.ok(data[0].amenities.includes('Lockers'));
-  assert.equal(data[0].contactUrl, null);
-});
-
-test('gym search, budget, and equipment filters combine with AND semantics', async () => {
-  const response = await fetch(apiUrl('/gyms?q=strength&budget=1200&equipment=Free%20weights&amenities=Parking'));
-  const { data } = await response.json();
-  assert.deepEqual(data.map((gym) => gym.id), ['forge-fitness', 'everyday-strength', 'iron-yard']);
-});
-
-test('price sorting and featured filtering preserve deterministic results', async () => {
-  const response = await fetch(apiUrl('/gyms?featured=true&sort=low'));
-  const { data } = await response.json();
-  assert.deepEqual(data.map((gym) => gym.id), ['everyday-strength', 'forge-fitness', 'district-athletics']);
-});
-
-test('gym detail returns the record for its slug', async () => {
-  const response = await fetch(apiUrl('/gyms/forge-fitness'));
-  const { data } = await response.json();
-  assert.equal(response.status, 200);
-  assert.equal(data.name, 'Forge Fitness Club');
-  assert.equal(data.monthly, 1200);
-});
-
-test('filter options are read from the equipment and amenity catalogues', async () => {
-  const response = await fetch(apiUrl('/gyms/options'));
-  const { data } = await response.json();
-  assert.equal(response.status, 200);
-  assert.deepEqual(data.equipment, ['Cable machines', 'Cardio machines', 'Free weights', 'Kettlebells', 'Squat racks']);
-  assert.deepEqual(data.amenities, ['Air conditioning', 'Lockers', 'Parking', 'Showers']);
-});
-
-test('unknown gyms and routes return structured 404 errors', async () => {
-  const gymResponse = await fetch(apiUrl('/gyms/not-a-gym'));
-  assert.equal(gymResponse.status, 404);
-  assert.deepEqual(await gymResponse.json(), {
-    error: { code: 'GYM_NOT_FOUND', message: 'No gym was found with that ID.' },
+test('authenticated routes reject missing bearer tokens', async () => {
+  const response = await fetch(apiUrl('/me'));
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), {
+    error: { code: 'AUTH_REQUIRED', message: 'Please sign in to continue.' },
   });
-
-  const routeResponse = await fetch(apiUrl('/unknown'));
-  assert.equal(routeResponse.status, 404);
-  assert.equal((await routeResponse.json()).error.code, 'NOT_FOUND');
 });
 
-test('invalid filters, methods, and unconfigured browser origins are rejected', async () => {
-  const invalidFilter = await fetch(apiUrl('/gyms?sort=nearest'));
-  assert.equal(invalidFilter.status, 400);
-  assert.equal((await invalidFilter.json()).error.code, 'INVALID_QUERY');
-
-  const unsupportedMethod = await fetch(apiUrl('/gyms'), { method: 'POST' });
-  assert.equal(unsupportedMethod.status, 405);
-
-  const blockedOrigin = await fetch(apiUrl('/gyms'), { headers: { Origin: 'https://untrusted.example' } });
-  assert.equal(blockedOrigin.status, 403);
+test('admin routes reject missing bearer tokens', async () => {
+  const response = await fetch(apiUrl('/admin/partnership-inquiries'));
+  assert.equal(response.status, 401);
+  assert.equal((await response.json()).error.code, 'AUTH_REQUIRED');
 });
 
-test('same-origin deployments do not require a CORS allowlist', async () => {
-  const host = `127.0.0.1:${server.address().port}`;
-  const response = await fetch(apiUrl('/health'), {
-    headers: { Origin: `http://${host}` },
+test('partnership inquiries require consent before database access', async () => {
+  const response = await fetch(apiUrl('/partnership-inquiries'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      gymName: 'Sample Gym',
+      contactName: 'Test User',
+      email: 'test@example.com',
+      location: 'Naga City',
+      consent: false,
+    }),
   });
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error.code, 'CONSENT_REQUIRED');
+});
 
-  const wrongScheme = await fetch(apiUrl('/health'), {
-    headers: { Origin: `https://${host}` },
+test('gym query parameters are validated before database access', async () => {
+  const response = await fetch(apiUrl('/gyms?sort=nearest'));
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error.code, 'INVALID_QUERY');
+});
+
+test('cross-origin requests are rejected and same-origin requests are allowed', async () => {
+  const blocked = await fetch(apiUrl('/health'), {
+    headers: { Origin: 'https://untrusted.example' },
   });
-  assert.equal(wrongScheme.status, 403);
+  assert.equal(blocked.status, 403);
+
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const sameOrigin = await fetch(apiUrl('/health'), { headers: { Origin: origin } });
+  assert.equal(sameOrigin.status, 200);
+  assert.equal(sameOrigin.headers.get('access-control-allow-origin'), origin);
+});
+
+test('unknown routes and unsupported methods use structured API errors', async () => {
+  const unknown = await fetch(apiUrl('/missing'));
+  assert.equal(unknown.status, 404);
+  assert.equal((await unknown.json()).error.code, 'NOT_FOUND');
+
+  const unsupported = await fetch(apiUrl('/gyms'), { method: 'POST' });
+  assert.equal(unsupported.status, 405);
+  assert.equal((await unsupported.json()).error.code, 'METHOD_NOT_ALLOWED');
 });

@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { LockKeyhole } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../context/AuthContext';
 
 export default function MemberGate({ children, title = 'Your next move, saved.' }) {
   const { user, loading, enabled, error } = useAuth();
@@ -13,7 +13,7 @@ export default function MemberGate({ children, title = 'Your next move, saved.' 
     <h1>{title}</h1>
     <p>Browse every gym freely. Sign in to compare gyms and keep your saved list together.</p>
     {error && <p role="alert" className="form-error">{error}</p>}
-    {!enabled && <p className="form-notice">Account screens are available to preview. Sign-in and account storage are awaiting backend integration.</p>}
+    {!enabled && <p className="form-notice">Account services are not configured. Connect the app to Supabase before signing in or saving your list.</p>}
     <div className="action-row">
       <Link className="button" to={`/login?next=${encodeURIComponent(pathname)}`}>Sign in</Link>
       <Link className="button dark" to={`/signup?next=${encodeURIComponent(pathname)}`}>Create an account</Link>

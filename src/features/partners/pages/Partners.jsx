@@ -11,7 +11,7 @@ export default function Partners() {
   return <div className="container page partners">
     <span className="eyebrow">STRONGER SPACES. STRONGER COMMUNITIES.</span>
     <h1>Your next member<br />is looking for <em>you.</em></h1>
-    <p className="page-intro">Be part of a simpler way to discover fitness in Naga City. Help people find the place where they�ll keep showing up.</p>
+    <p className="page-intro">Be part of a simpler way to discover fitness in Naga City. Help people find the place where they'll keep showing up.</p>
     <a className="button" href="#partner-inquiry">Inquire about a listing</a>
     <div className="benefit-grid">{benefits.map(([Icon, title, body]) => <article key={title}><Icon size={28} /><h2>{title}</h2><p>{body}</p></article>)}</div>
     <InquiryForm />

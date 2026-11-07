@@ -1,8 +1,8 @@
 import { useState, useEffect, useContext } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ArrowUpRight, X, Menu } from 'lucide-react';
-import { CompareContext } from '../contexts/CompareContext';
-import { useAuth } from '../contexts/AuthContext';
+import { CompareContext } from '../../features/gyms/context/CompareContext';
+import { useAuth } from '../../features/auth/context/AuthContext';
 import Brand from './Brand';
 
 export default function Navbar() {
@@ -28,6 +28,9 @@ export default function Navbar() {
         <Link className={pathname === '/gyms' ? 'active' : ''} to="/gyms">Explore gyms</Link>
         <Link className={pathname === '/compare' ? 'active' : ''} to="/compare">Compare gyms {selected.length > 0 && <span className="count">{selected.length}</span>}</Link>
         <Link className={pathname === '/saved' ? 'active' : ''} to="/saved">Saved gyms</Link>
+        <Link className={pathname.startsWith('/trainers') ? 'active' : ''} to="/trainers">Find trainers</Link>
+        <Link className={pathname === '/plans' ? 'active' : ''} to="/plans">Plans</Link>
+        {user?.role === 'trainer' && <Link className={pathname === '/trainer/dashboard' ? 'active' : ''} to="/trainer/dashboard">Trainer dashboard</Link>}
         <Link className="nav-partner" to="/partners">For gym owners <ArrowUpRight size={16} /></Link>
         {loading ? <span role="status">Checking session...</span> : user ? <button className="nav-auth" onClick={signOut} disabled={busy}>{busy ? 'Signing out...' : 'Sign out'}</button> : <Link className="nav-auth" to="/login">Sign in</Link>}
       </nav>

@@ -1,99 +1,113 @@
 # GYMIFY
 
-Responsive gym-discovery app for Naga City, Philippines. The React/Vite frontend reads illustrative, read-only gym listings from a Node.js API. The API uses bundled sample data, so the complete app can deploy as one Vercel project without a database service.
+GYMIFY is a gym and trainer discovery app for Naga City, Philippines. The production architecture uses a React/Vite frontend and Express API on Vercel, Supabase for Postgres and authentication, and Stripe for GYMIFY's optional Premium subscription. Gym listings in the initial migration are illustrative samples, not verified businesses.
 
-## Requirements
+## Source layout
 
-- Node.js 20.19 or later.
-- npm, or pnpm for the frontend.
+- `src/features/` contains feature-owned pages, components, context, and data for auth, gyms, trainers, partners, and membership.
+- `src/shared/components/` contains UI shared across features.
+- `src/services/` contains API clients; `src/lib/` contains external-service setup.
+- `src/App.jsx` wires the routes and providers; `src/main.jsx` and `src/styles.css` are the frontend entry point and global styles.
+- `backend/src/` contains the Express app, server entry point, and backend data.
 
 ## Local development
 
-Install frontend and backend dependencies:
-
-```sh
-npm install
-npm install --prefix backend
-```
-
-Copy the optional local API settings, then start the API and frontend together:
+Requirements: Node.js 20.19 or newer and pnpm 9.
 
 ```powershell
 Copy-Item .env.example .env.local
-npm run dev
+Copy-Item backend/.env.example backend/.env
+corepack pnpm install
+corepack pnpm dev
 ```
 
-Open the Vite URL printed in the terminal (usually `http://localhost:5173`). In development, Vite proxies `/api` requests to the backend on port `4000`, so `VITE_API_BASE_URL` can remain blank.
+If `corepack` is not available, install pnpm 9 with `npm install --global pnpm@9`. Set the Supabase and Stripe values in `backend/.env`; set the Supabase public URL and anon key in `.env.local`. Keep the service-role key and Stripe secrets only in `backend/.env`. The frontend starts at `http://localhost:5173` and the API at `http://localhost:4000`. Gym data and account features need a configured Supabase project and the schema migration below. Stripe checkout additionally needs Stripe test credentials and a configured monthly Price.
 
-## Backend
-
-The backend is a read-only Express API. The Vercel function in `api/` and the local Express server use the same bundled sample catalogue and endpoints:
-
-- `GET /api/v1/health`
-- `GET /api/v1/gyms`
-- `GET /api/v1/gyms/options`
-- `GET /api/v1/gyms/:id`
-
-Gym listing filters include `q`, `budget`, repeated `equipment` and `amenities`, `sort=featured|low|high`, `featured=true|false`, and repeated or comma-separated `ids`. Selected equipment and amenities use AND matching.
-
-From the backend directory, run API tests with:
+Useful commands:
 
 ```sh
-npm test
+corepack pnpm build
+corepack pnpm backend:test
 ```
 
-For direct backend setup and the complete endpoint reference, see [backend/README.md](./backend/README.md).
+## Set up Supabase
 
-## Deploy frontend and API together to Vercel
+1. Create a Supabase project and keep its database password in a password manager.
+2. In **SQL Editor**, run [`supabase/migrations/20261106000000_initial_schema.sql`](./supabase/migrations/20261106000000_initial_schema.sql). It creates the schema, Row Level Security policies, signup trigger, RPCs, and six sample gyms. For future schema changes, add a new migration rather than editing an already-applied migration.
+3. In **Authentication → URL Configuration**, set the Site URL to your production app and add the exact local and production callback URLs, including `/login` and `/reset-password`.
+4. Copy the project URL and public anon key to `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. Put the project URL, anon key, and service-role key in the server environment as `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. The service-role key bypasses RLS; it must never use a `VITE_` variable or be exposed to a browser.
+5. Before launch, replace the sample gyms with verified listings and update their sample status. Do not present seeded data as real businesses.
 
-The root project is configured for a single Vercel deployment: Vercel builds the Vite frontend and serves the Express API from `api/[...path].js` at the same origin. No Render service, SQLite file, database integration, CORS setup, or `VITE_API_BASE_URL` variable is needed.
+## Set up Stripe Premium
 
-1. Push the repository to GitHub and import it in Vercel.
-2. Keep the project root at `./`, select **Vite** if prompted, and deploy with the default install/build settings (`pnpm build`, output directory `dist`).
-3. Open the Vercel deployment URL. The frontend calls `/api/v1` on that same domain; check `/api/v1/health` to verify the API.
+In Stripe, create a recurring **₱175 PHP monthly** Price. Configure the API with its Price ID as `STRIPE_PREMIUM_PRICE_ID`, plus server-only `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`. The API refuses checkout if the configured Price is not active and exactly PHP 175 per month.
 
-The current catalogue contains only six read-only sample gyms, so it is bundled with the API. To update those samples, edit `backend/src/data/sample-gyms.js` and redeploy. This approach does not persist data changes or support user-submitted listings; add a managed database such as Postgres when the app needs dynamic records.
+Add a Stripe webhook endpoint at `https://YOUR-APP-DOMAIN/api/v1/billing/webhook` for:
 
-## Deploy frontend to GitHub Pages
+- `checkout.session.completed`
+- `customer.subscription.created`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
 
-The `.github/workflows/deploy-pages.yml` workflow builds the app with the repository subpath and hash-based routes, then publishes it to GitHub Pages. This avoids blank pages from root-relative asset paths and supports refreshing nested routes.
+Copy the endpoint signing secret into `STRIPE_WEBHOOK_SECRET`. Subscription entitlements are updated from signed webhook events, not from the browser's checkout redirect. Use Stripe test mode until end-to-end testing is complete.
 
-1. In GitHub, open the repository **Settings → Pages** and set **Build and deployment → Source** to **GitHub Actions**.
-2. Under **Settings → Secrets and variables → Actions → Variables**, add `VITE_API_BASE_URL` with the Vercel deployment URL ending in `/api/v1` (for example `https://your-project.vercel.app/api/v1`).
-3. Go to **Actions**, enable workflows if asked, and run **Deploy to GitHub Pages** (or push a commit to `main`).
-4. Open `https://aj-akay.github.io/Gymify_Copy/`. The routes use a `#`, such as `/Gymify_Copy/#/gyms`.
-5. In Vercel project **Settings → Environment Variables**, set `CORS_ORIGINS` to `http://localhost:5173,https://aj-akay.github.io` and redeploy.
+## Deploy the app to Vercel
 
-GitHub Pages hosts only the static frontend; it does not run the Express API. Set the Actions variable `VITE_API_BASE_URL` to a separately hosted API URL ending in `/api/v1` to load listings there.
+1. Import this repository into Vercel and leave the project root at the repository root. Use `pnpm build` as the build command and `dist` as the output directory.
+2. Add these environment variables to Vercel:
 
-## Frontend build and preview
+   **Browser-visible configuration** (the Supabase anon key is public; database RLS is mandatory):
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+   - `VITE_INQUIRY_API_ENABLED=true`
 
-```sh
-npm run build
-npm run preview
-```
+   **Server-only configuration**:
+   - `SUPABASE_URL`
+   - `SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `STRIPE_SECRET_KEY`
+   - `STRIPE_WEBHOOK_SECRET`
+   - `STRIPE_PREMIUM_PRICE_ID`
+   - `APP_BASE_URL` (the exact public Vercel origin, with no trailing slash)
 
-For local development, leave `VITE_API_BASE_URL` blank; Vite proxies API requests to the local backend. Vercel production builds use the same-origin `/api/v1` route by default. GitHub Pages builds require a separately hosted API URL.
+   Leave `VITE_API_BASE_URL` unset for Vercel; the frontend calls the same-origin serverless API. Never add server-only keys as `VITE_` variables.
+3. Add your production domain and local callback URLs in Supabase Auth URL Configuration. Also configure your Stripe webhook URL and secret.
+4. Deploy. Verify `/api/v1/health`, gym discovery, signup/email verification, saved gyms, trainer requests, inquiry submission, and Stripe test checkout/webhook before inviting customers.
 
-## Data and scope
+Vercel deploys the frontend and API together, but it does not create/configure the Supabase or Stripe projects for you. The service is not live or production-ready until those external services, secrets, auth email settings, verified listings, and operational review are configured.
 
-Gym names, locations, rates, hours, and photos are illustrative. No gym contacts, booking, payments, authentication, user profiles, or listing-management screens are part of the current UI, so the API does not expose write or account endpoints. Add verified data and an appropriate owner/admin workflow before accepting real listings or enabling management operations.
+## Approvals and launch operations
 
-## Account and inquiry frontend (backend handoff)
+- Gym-partner inquiries are stored privately with a pending status. An admin can list and review them through `GET /api/v1/admin/partnership-inquiries` and mark them `approved`, `declined`, or `pending` through `PATCH /api/v1/admin/partnership-inquiries/:id`.
+- Create and email-invite the partner's user in **Supabase → Authentication → Users** first. Then an authenticated admin can assign approved partner access with `POST /api/v1/admin/partners` using `{ "email": "...", "displayName": "...", "gymId": "..." }`. The target gym must already exist.
+- These admin endpoints are API-only; there is no staff dashboard yet. Use an authenticated admin session to call them and keep admin access tightly restricted.
+- To bootstrap the first admin, create and verify your own account, then run this in the Supabase SQL Editor as project owner, replacing the email:
 
-Public gym browsing stays available without an account. Comparing and saving gyms now require sign-in. Login/signup/recovery screens and saved-gym UI are prepared for the team's API. The owner partnership page contains a basic inquiry form. Both integrations are **off by default** and explicitly labeled as previews until backend endpoints exist. The existing read-only backend is unchanged.
+  ```sql
+  update public.profiles
+  set role = 'admin'
+  where id = (
+    select id from auth.users where lower(email) = lower('you@example.com')
+  );
+  ```
+- Trainer accounts and profiles start unapproved. Verify qualifications and identity out-of-band before setting `trainer_profiles.verification_status` to `approved` in the Supabase dashboard. Only then do they appear in public discovery.
+- Trainers and gym-goers arrange gym membership and trainer-session payments directly. GYMIFY collects only the Premium app subscription. Contact details and trainer availability are private until a connection is accepted.
+- Establish privacy/retention, support, incident response, and account deletion procedures before collecting real customer data. Use a paid Supabase plan with backups/PITR appropriate to the business, test restores, monitor Stripe webhook failures, and review database access regularly.
 
-See [docs/FRONTEND_API.md](docs/FRONTEND_API.md) for the proposed endpoints, response shapes, feature flags, and integration checklist. The gym catalogue API remains read-only; member and inquiry APIs are not implemented. The former hosted-form URL setting is superseded by the inline inquiry form.
+The current Premium quota is 5 combined trainer connection/session requests per month on Free and 20 on Premium. Gym browsing is free. The service does not collect gym or trainer fees.
 
-### Change spacing yourself
+## GitHub Pages (static alternative)
 
-Search `CUSTOMIZE SPACING HERE` in `src/styles.css`:
+GitHub Pages does not run the API and is not the recommended deployment for account, password-recovery, and billing workflows. If you use it for the static discovery experience, deploy a separately hosted API and set GitHub Actions repository **Variables** `VITE_API_BASE_URL`, `VITE_SUPABASE_URL`, and `VITE_SUPABASE_ANON_KEY`; set `VITE_INQUIRY_API_ENABLED` to `true` only when the API and database are configured. Configure the hosted API's `CORS_ORIGINS` for the Pages origin. Keep every service-role and Stripe key on the server.
 
-- `--page-gutter`: horizontal space beside the main content.
-- `--page-space`: space above and below inner pages.
-- `--card-padding`: space inside gym cards, including the Save action.
-- `--panel-padding`: padding inside account and inquiry panels.
-- `--field-padding`: padding inside form inputs.
-- `--form-gap`: distance between form fields.
+The repository includes a Render Blueprint as an alternative API host. Configure its required secrets and public app URL in Render before deployment. For password recovery and payment return URLs, use Vercel rather than GitHub Pages.
 
-For example, increase `--panel-padding` from `clamp(22px, 4vw, 40px)` to `clamp(26px, 4vw, 48px)`. The smallest number applies on narrow screens and the largest caps desktop padding. Layout-specific gaps still live in their named CSS classes. Save while the Vite server runs to see changes.
+## Further reference
+
+- [API and database notes](./backend/README.md)
+- [Deployment environment variables](./.env.example) and [server environment variables](./backend/.env.example)
+- [GitHub Pages workflow](./.github/workflows/deploy-pages.yml)
+
+### Styling
+
+Search `CUSTOMIZE SPACING HERE` in `src/styles.css` for the page gutter, page spacing, card padding, panel padding, field padding, and form gap variables.

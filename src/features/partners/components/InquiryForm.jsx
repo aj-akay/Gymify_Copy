@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { inquiryApiEnabled, memberRequest } from '../services/memberApi';
+import { inquiryApiEnabled, memberRequest } from '../../../services/memberApi';
 
 export default function InquiryForm() {
   const [busy, setBusy] = useState(false);
@@ -20,7 +20,7 @@ export default function InquiryForm() {
       await memberRequest('/partnership-inquiries', { method: 'POST', body: {
         gymName: values.gymName.trim(), contactName: values.contactName.trim(),
         email: values.email.trim(), phone: values.phone.trim(), location: values.location.trim(),
-        message: values.message.trim(), consent: true,
+        message: values.message.trim(), consent: true, website: values.website.trim(),
       } });
       setMessage('Your inquiry has been sent. The GYMIFY team will contact you using the details provided.');
       form.reset();
@@ -28,10 +28,11 @@ export default function InquiryForm() {
     finally { setBusy(false); }
   }
   return <section className="form-panel inquiry-form" id="partner-inquiry" aria-labelledby="inquiry-title">
-    <span className="eyebrow">LET�S START A CONVERSATION</span><h2 id="inquiry-title">Introduce your gym.</h2>
+    <span className="eyebrow">LET'S START A CONVERSATION</span><h2 id="inquiry-title">Introduce your gym.</h2>
     <p>Share a few details so the team can discuss listing your gym. Submitting an inquiry does not create a paid partnership.</p>
     {!inquiryApiEnabled && <p className="form-notice">Frontend preview: submission is not connected yet. You can fill out and check this form; nothing will be sent.</p>}
     <form className="stack-form" onSubmit={submit} aria-busy={busy}>
+      <label className="inquiry-honeypot" aria-hidden="true">Leave this field empty<input name="website" tabIndex="-1" autoComplete="off" /></label>
       <div className="form-grid">
         <label>Gym name<input name="gymName" required maxLength={120} autoComplete="organization" /></label>
         <label>Contact person<input name="contactName" required maxLength={80} autoComplete="name" /></label>

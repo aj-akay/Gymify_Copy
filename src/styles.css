@@ -1911,6 +1911,7 @@ input::placeholder{
 .save-hint { display: block; color: var(--muted); font-size: 11px; margin-top: 10px; }
 .detail-save { margin: 20px 0; }
 .inquiry-form { max-width: 820px; margin: 0 auto; scroll-margin-top: 24px; }
+.inquiry-honeypot { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
 
 @media (min-width: 761px) and (max-width: 1100px) {
     .nav { height: auto; min-height: 93px; flex-wrap: wrap; padding-block: 18px; gap: 20px; }

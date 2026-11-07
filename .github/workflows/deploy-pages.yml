@@ -41,6 +41,9 @@ jobs:
         env:
           VITE_GITHUB_PAGES: 'true'
           VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_INQUIRY_API_ENABLED: ${{ vars.VITE_INQUIRY_API_ENABLED }}
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
