@@ -29,7 +29,11 @@ export async function fetchApi(path, { signal } = {}) {
   try {
     body = await response.json();
   } catch {
-    throw new Error('The GYMIFY API returned an invalid response.');
+    const isLocalDev = import.meta.env.DEV && API_BASE_URL === '/api/v1';
+    if (isLocalDev) {
+      throw new Error('The GYMIFY API is not responding. Start the API and frontend together with `npm run dev`, then configure Supabase in `backend/.env`.');
+    }
+    throw new Error('The GYMIFY API returned an invalid response. Check that VITE_API_BASE_URL points to the API, not the frontend site.');
   }
 
   if (!response.ok) {

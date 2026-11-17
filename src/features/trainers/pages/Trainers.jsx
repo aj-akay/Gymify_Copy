@@ -8,6 +8,7 @@ export default function Trainers() {
   const [trainers, setTrainers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [revision, setRevision] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -15,7 +16,10 @@ export default function Trainers() {
       setLoading(true);
       setError('');
       fetchApi(`/trainers?q=${encodeURIComponent(query)}`, { signal: controller.signal })
-        .then(setTrainers)
+        .then((data) => {
+          if (!Array.isArray(data)) throw new Error('Trainer listings are temporarily unavailable. Please try again.');
+          setTrainers(data);
+        })
         .catch((requestError) => {
           if (requestError.name !== 'AbortError') setError(requestError.message);
         })
@@ -27,17 +31,18 @@ export default function Trainers() {
       clearTimeout(timeout);
       controller.abort();
     };
-  }, [query]);
+  }, [query, revision]);
 
   return <div className="container page trainer-directory">
     <span className="eyebrow">FIND YOUR TRAINING PARTNER</span>
     <h1>Meet trainers in Naga.</h1>
     <p className="page-intro">Explore verified trainer profiles and request a private connection. Contact details and availability stay private until a trainer accepts.</p>
     <label className="trainer-search"><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search specialties or area" aria-label="Search trainers" /></label>
-    {error && <p className="form-error" role="alert">{error}</p>}
-    {loading && <p role="status">Finding trainers...</p>}
-    {!loading && !error && !trainers.length && <div className="empty"><h2>No trainers listed yet.</h2><p>Verified trainer profiles will appear here as they join GYMIFY.</p></div>}
-    <div className="trainer-grid">
+    {error && <div className="form-error trainer-error" role="alert"><p>{error}</p><button className="button" type="button" onClick={() => setRevision((value) => value + 1)}>Try again</button></div>}
+    {loading && <p className="trainer-loading" role="status" aria-live="polite"><span className="loading-spinner" aria-hidden="true" />Finding trainers…</p>}
+    {!loading && !error && !trainers.length && <div className="empty" role="status"><h2>{query.trim() ? 'No trainers match that search.' : 'No trainers listed yet.'}</h2><p>{query.trim() ? 'Try a different specialty or area.' : 'Verified trainer profiles will appear here as they join GYMIFY.'}</p>{query.trim() && <button className="button" type="button" onClick={() => setQuery('')}>Clear search</button>}</div>}
+    {!loading && !error && trainers.length > 0 && <p className="trainer-results" aria-live="polite">{trainers.length} {trainers.length === 1 ? 'trainer' : 'trainers'} to explore</p>}
+    {!error && <div className="trainer-grid">
       {trainers.map((trainer) => <article className="trainer-card" key={trainer.id}>
         {trainer.avatarUrl
           ? <img className="trainer-avatar" src={trainer.avatarUrl} alt="" />
@@ -51,7 +56,7 @@ export default function Trainers() {
           <Link className="text-link" to={`/trainers/${trainer.id}`}>View profile <ArrowUpRight size={16} /></Link>
         </div>
       </article>)}
-    </div>
+    </div>}
     <p className="trainer-footnote">Trainer profiles are reviewed before appearing publicly. GYMIFY helps you connect; trainers and gym-goers arrange and pay for training directly.</p>
   </div>;
 }
