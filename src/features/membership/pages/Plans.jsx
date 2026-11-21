@@ -33,7 +33,8 @@ export default function Plans() {
       const { url } = await memberRequest(path, { method: 'POST' });
       window.location.assign(url);
     } catch (requestError) {
-      setError(requestError.message || 'Could not open billing. Please try again.');
+      const message = requestError.message || 'Could not open billing. Please try again.';
+      setError(message);
       setBusy(false);
     }
   }
@@ -44,9 +45,10 @@ export default function Plans() {
     setNotice('');
     try {
       await refreshAccount();
-      setNotice('Your subscription status is up to date.');
+      setNotice('Your Premium access status is up to date.');
     } catch (requestError) {
-      setError(requestError.message || 'Could not refresh your plan.');
+      const message = requestError.message || 'Could not refresh your plan. Please try again.';
+      setError(message);
     } finally {
       setBusy(false);
     }
@@ -55,12 +57,12 @@ export default function Plans() {
   return <div className="container page plans-page">
     <span className="eyebrow">SIMPLE MEMBERSHIP. MORE ROOM TO CONNECT.</span>
     <h1>Choose your GYMIFY plan.</h1>
-    <p className="page-intro">Gym discovery is free. Premium is an app subscription for more trainer connection and session requests—not a gym membership or trainer fee.</p>
-    {checkoutStatus === 'success' && <div className="form-notice" role="status">Checkout completed. Your plan updates after Stripe confirms the subscription. <button className="text-link" onClick={refreshPlan} disabled={busy}>Refresh status</button></div>}
-    {checkoutStatus === 'cancelled' && <div className="form-notice" role="status">Checkout was cancelled. You are still on the Free plan.</div>}
+    <p className="page-intro">Gym discovery is free. Premium is a 30-day app pass that raises your trainer requests—not a gym membership or trainer fee.</p>
+    {checkoutStatus === 'success' && <div className="form-notice" role="status">Thanks! PayMongo is confirming your payment. Your Premium access starts after confirmation. <button className="text-link" onClick={refreshPlan} disabled={busy}>Refresh status</button></div>}
+    {checkoutStatus === 'cancelled' && <div className="form-notice" role="status">Checkout was cancelled. No payment was taken, and your current access is unchanged.</div>}
     {error && <p className="form-error" role="alert">{error}</p>}
     {notice && <p className="form-success" role="status">{notice}</p>}
-    {user && <p className="plan-status">Your current plan: <strong>{premium ? 'Premium' : 'Free'}</strong>{subscription?.current_period_end && premium ? ` · renews ${new Date(subscription.current_period_end).toLocaleDateString()}` : ''}</p>}
+    {user && <p className="plan-status">Your current plan: <strong>{premium ? 'Premium' : 'Free'}</strong>{subscription?.current_period_end && premium ? ` · access through ${new Date(subscription.current_period_end).toLocaleDateString()}` : ''}</p>}
     <div className="plan-grid">
       <article className="plan-card">
         <span className="eyebrow">FREE</span>
@@ -72,14 +74,14 @@ export default function Plans() {
       <article className="plan-card plan-card-premium">
         <span className="eyebrow">PREMIUM</span>
         <h2>Make more connections</h2>
-        <p className="plan-price">₱175 <span>/ month</span></p>
+        <p className="plan-price">₱175 <span>/ 30 days</span></p>
         <ul>{premiumFeatures.map((feature) => <li key={feature}><Check size={17} />{feature}</li>)}</ul>
+        <p className="premium-payment-note">Pay with GCash, card, Maya, or QR Ph. No automatic charges; renew manually every 30 days.</p>
         {!user && <Link className="button" to="/signup?next=%2Fplans">Choose Premium</Link>}
-        {user?.role === 'gym_goer' && !premium && <button className="button" disabled={busy} onClick={() => openBilling('/billing/checkout')}>{busy ? 'Opening secure checkout...' : 'Subscribe to Premium'}</button>}
-        {premium && <button className="button button-secondary" disabled={busy} onClick={() => openBilling('/billing/portal')}>{busy ? 'Opening billing...' : 'Manage subscription'}</button>}
-        {user && user.role !== 'gym_goer' && <p className="trainer-meta">Premium app subscriptions are for gym-goer accounts.</p>}
+        {user?.role === 'gym_goer' && <button className="button" disabled={busy} onClick={() => openBilling('/billing/checkout')}>{busy ? 'Opening secure checkout...' : premium ? 'Add 30 days · ₱175' : 'Get Premium · ₱175'}</button>}
+        {user && user.role !== 'gym_goer' && <p className="trainer-meta">Premium app passes are available to gym-goer accounts.</p>}
       </article>
     </div>
-    <p className="plan-footnote">Payments for gym memberships and trainer sessions are arranged directly with the gym or trainer. GYMIFY only collects its own Premium app subscription. Cancel Premium through the secure billing portal.</p>
+    <p className="plan-footnote">Premium is a one-time 30-day purchase and does not auto-renew. Pay for another 30 days any time. Payments for gym memberships and trainer sessions are arranged directly with the gym or trainer.</p>
   </div>;
 }

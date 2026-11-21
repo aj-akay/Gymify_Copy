@@ -54,7 +54,7 @@ export default function Directory() {
     <div className="directory-layout">
       <aside className="filters" aria-label="Gym search filters">
         <div className="filters-heading"><h2><SlidersHorizontal size={18} /> Refine your search</h2>{activeCount > 0 && <span className="filter-count">{activeCount} active</span>}</div>
-        <label className="filter-label" htmlFor="search">Gym or neighborhood</label>
+        <label className="filter-label" htmlFor="search">Gym or area</label>
         <div className="search-input"><Search size={17} /><input id="search" placeholder="Try a name or area" value={q} onChange={(event) => setQ(event.target.value)} /></div>
         <label className="filter-label" htmlFor="budget">Monthly budget</label>
         <select id="budget" value={budget} onChange={(event) => setBudget(event.target.value)}><option value="">Any price</option><option value="1000">Up to ₱1,000</option><option value="1500">Up to ₱1,500</option><option value="2000">Up to ₱2,000</option></select>

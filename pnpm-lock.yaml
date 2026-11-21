@@ -26,9 +26,6 @@ importers:
       react-router-dom:
         specifier: ^7.6.0
         version: 7.18.5(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      stripe:
-        specifier: ^23.1.0
-        version: 23.1.0
     devDependencies:
       '@tailwindcss/vite':
         specifier: ^4.1.0
@@ -1071,15 +1068,6 @@ packages:
     resolution: {integrity: sha512-DvEy55V3DB7uknRo+4iOGT5fP1slR8wQohVdknigZPMpMstaKJQWhwiYBACJE3Ul2pTnATihhBYnRhZQHGBiRw==}
     engines: {node: '>= 0.8'}
 
-  stripe@23.1.0:
-    resolution: {integrity: sha512-fVUfMSfTPoukfoV//MUKAx2+YxyKmYaYtnAL9VkfnHfaPNQylFdWZMD+zgUFerI8rjbaiER8Vzj2XEUQ2AhAsQ==}
-    engines: {node: '>=20'}
-    peerDependencies:
-      '@types/node': '>=20'
-    peerDependenciesMeta:
-      '@types/node':
-        optional: true
-
   tailwindcss@4.3.3:
     resolution: {integrity: sha512-gOhV3P7ufE62QDGg1zVaTgCR+EtPv92k2nIhVcVKcLmxT1sUBsQGhnZj175j+MqRt4zLF7ic+sCYjfhxMxj7YQ==}
 
@@ -2087,8 +2075,6 @@ snapshots:
   source-map-js@1.2.2: {}
 
   statuses@2.0.2: {}
-
-  stripe@23.1.0: {}
 
   tailwindcss@4.3.3: {}
 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowUpRight, MapPin, Search, Dumbbell, Building2, GitCompareArrows } from 'lucide-react';
+import { ArrowUpRight, MapPin, Search, Building2, GitCompareArrows } from 'lucide-react';
 import { useGyms } from '../context/GymsContext';
 import { heroImage } from '../data/gyms';
 import SampleNote from '../components/SampleNote.jsx';
@@ -21,7 +21,6 @@ export default function Home() {
   return <>
     <section className="hero container">
       <div className="hero-copy">
-        <span className="eyebrow"><span className="live-dot" /> YOUR CITY. YOUR NEXT CHAPTER.</span>
         <h1>Find your gym.<br />Build your <span>momentum.</span></h1>
         <p>The right space changes everything. Discover and compare gyms in Naga City, and find where you belong.</p>
         <form className="hero-search" onSubmit={searchGyms} role="search">
@@ -30,7 +29,6 @@ export default function Home() {
           <button className="button" type="submit">Find gyms <ArrowUpRight size={18} /></button>
         </form>
         <div className="hero-location"><MapPin size={15} aria-hidden="true" /> Naga City, Camarines Sur <span>·</span> A local-first discovery experience</div>
-        <div className="hero-bottom"><div className="mini-icon"><Dumbbell size={19} /></div><div><strong>Your goals. Your budget. Your fit.</strong><small>Less searching. More showing up.</small></div></div>
       </div>
       <div className="hero-visual">
         <img src={heroImage} alt="Illustrative gym interior with strength training equipment" />

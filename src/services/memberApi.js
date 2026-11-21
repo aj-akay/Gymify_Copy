@@ -37,5 +37,5 @@ export function safeReturnPath(value) {
   return typeof value === 'string'
     && /^\/(compare|saved|plans|trainer\/dashboard|trainers(?:\/[a-z0-9-]+)?|gyms(?:\/[a-z0-9-]+)?)$/.test(value)
     ? value
-    : '/saved';
+    : '/gyms';
 }

@@ -16,7 +16,12 @@ export function GymsProvider({ children }) {
     fetchApi('/gyms', { signal: controller.signal }).then(data => {
       if (!Array.isArray(data)) throw new Error('The gym API returned an unexpected result.');
       setGyms(data);
-    }).catch(e => { if (e.name !== 'AbortError') setError(e.message); })
+    }).catch(e => {
+      if (e.name !== 'AbortError') {
+        const message = e.message || 'Could not load gym listings. Please try again.';
+        setError(message);
+      }
+    })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [revision]);

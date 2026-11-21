@@ -12,19 +12,31 @@ export default function InquiryForm() {
     const form = event.currentTarget;
     const values = Object.fromEntries(new FormData(form));
     if (!inquiryApiEnabled) {
-      setMessage('Your form passes the basic checks. This is a preview only: nothing was sent or stored.');
+      const previewMessage = 'Your form looks good. This is a preview; nothing was sent or stored.';
+      setMessage(previewMessage);
       return;
     }
     setBusy(true);
     try {
-      await memberRequest('/partnership-inquiries', { method: 'POST', body: {
+      const result = await memberRequest('/partnership-inquiries', { method: 'POST', body: {
         gymName: values.gymName.trim(), contactName: values.contactName.trim(),
         email: values.email.trim(), phone: values.phone.trim(), location: values.location.trim(),
         message: values.message.trim(), consent: true, website: values.website.trim(),
       } });
-      setMessage('Your inquiry has been sent. The GYMIFY team will contact you using the details provided.');
+      const delivery = result?.emailDelivery || {};
+      const successMessage = delivery.owner && delivery.admin
+        ? 'Inquiry received. We emailed you a confirmation and notified the GYMIFY review team.'
+        : delivery.owner
+          ? 'Inquiry received and confirmation emailed. The team will review it in the admin dashboard.'
+          : delivery.admin
+            ? 'Inquiry received and sent to the GYMIFY review team. Email confirmation is temporarily unavailable; the team will contact you with updates.'
+            : 'Inquiry received and saved. Email updates are not configured yet; the team will review it and contact you using the details provided.';
+      setMessage(successMessage);
       form.reset();
-    } catch (e) { setError(e.message || 'Could not send your inquiry. Please try again.'); }
+    } catch (e) {
+      const errorMessage = e.message || 'Could not send your inquiry. Please try again.';
+      setError(errorMessage);
+    }
     finally { setBusy(false); }
   }
   return <section className="form-panel inquiry-form" id="partner-inquiry" aria-labelledby="inquiry-title">

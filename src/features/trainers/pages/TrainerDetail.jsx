@@ -37,11 +37,17 @@ export default function TrainerDetail() {
     fetchApi(`/trainers/${encodeURIComponent(id)}`, { signal: controller.signal })
       .then(setTrainer)
       .catch((requestError) => {
-        if (requestError.name !== 'AbortError') setError(requestError.message);
+        if (requestError.name !== 'AbortError') {
+          const message = requestError.message || 'Could not load this trainer profile. Please try again.';
+          setError(message);
+        }
       });
     if (user?.role === 'gym_goer') {
       refreshRequests().catch((requestError) => {
-        if (requestError.status !== 401) setError(requestError.message);
+        if (requestError.status !== 401) {
+          const message = requestError.message || 'Could not load your trainer requests.';
+          setError(message);
+        }
       });
     }
     return () => controller.abort();
@@ -53,7 +59,8 @@ export default function TrainerDetail() {
       return;
     }
     if (user.role !== 'gym_goer') {
-      setError('Trainer connections are available to gym-goer accounts.');
+      const message = 'Trainer connections are available to gym-goer accounts.';
+      setError(message);
       return;
     }
     setBusy(true);
@@ -75,10 +82,16 @@ export default function TrainerDetail() {
       });
       setMessage('');
       setSessionTime('');
-      await refreshRequests();
       setError('');
+      try {
+        await refreshRequests();
+      } catch (refreshError) {
+        const refreshMessage = `Your request was sent, but its status could not be refreshed. ${refreshError.message || 'Reload the page to check its status.'}`;
+        setError(refreshMessage);
+      }
     } catch (requestError) {
-      setError(requestError.message || 'Could not send this request.');
+      const message = requestError.message || 'Could not send this request. Please try again.';
+      setError(message);
     } finally {
       setBusy(false);
     }
@@ -138,7 +151,7 @@ export default function TrainerDetail() {
         <button className="button" disabled={busy}>{busy ? 'Sending...' : 'Request 1-hour session'}</button>
       </form>
       {sessionRequests.length > 0 && <div><h3>Your session requests</h3><ul className="availability-list">{sessionRequests.map((request) => <li key={request.id}>{new Date(request.requested_start).toLocaleString()} · {request.status}</li>)}</ul></div>}
-      <p className="trainer-footnote">You arrange and pay the trainer directly. GYMIFY’s Premium subscription covers app features only.</p>
+      <p className="trainer-footnote">You arrange and pay the trainer directly. GYMIFY Premium is an app pass that only changes your monthly request limit.</p>
     </section>}
   </div>;
 }

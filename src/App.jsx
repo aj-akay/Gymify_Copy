@@ -2,7 +2,7 @@ import GymDataState from './features/gyms/components/GymDataState';
 import { GymsProvider } from './features/gyms/context/GymsContext';
 import { useState } from 'react';
 import { BrowserRouter, HashRouter, Routes, Route, Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, X } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { CompareContext } from './features/gyms/context/CompareContext';
 import { SavedProvider } from './features/gyms/context/SavedContext';
 import { AuthProvider, useAuth } from './features/auth/context/AuthContext';
@@ -20,23 +20,35 @@ import AuthPage from './features/auth/pages/AuthPage';
 import Trainers from './features/trainers/pages/Trainers';
 import TrainerDetail from './features/trainers/pages/TrainerDetail';
 import TrainerDashboard from './features/trainers/pages/TrainerDashboard';
+import AdminDashboard from './features/admin/pages/AdminDashboard';
 import Plans from './features/membership/pages/Plans';
+import { ToastProvider, useToast } from './shared/contexts/ToastContext';
+import { useGyms } from './features/gyms/context/GymsContext';
 
 const AppRouter = import.meta.env.VITE_GITHUB_PAGES === 'true' ? HashRouter : BrowserRouter;
 
 function AppRoutes() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { gyms } = useGyms();
+  const notify = useToast();
   // Comparison is session-local. The backend can add persistence later.
   const [comparison, setComparison] = useState({ owner: null, ids: [] });
   const selected = user && comparison.owner === user.id ? comparison.ids : [];
-  const [notice, setNotice] = useState('');
-
   function toggle(id) {
-    if (!user) { navigate('/login?next=%2Fcompare'); return; }
-    if (selected.includes(id)) setComparison({ owner: user.id, ids: selected.filter(x => x !== id) });
-    else if (selected.length < 3) setComparison({ owner: user.id, ids: [...selected, id] });
-    else setNotice('You can compare up to 3 gyms. Remove one to add another.');
+    if (!user) {
+      notify('Sign in to compare gyms.', 'info');
+      navigate('/login?next=%2Fcompare');
+      return;
+    }
+    const gymName = gyms.find((gym) => gym.id === id)?.name || 'Gym';
+    if (selected.includes(id)) {
+      setComparison({ owner: user.id, ids: selected.filter((item) => item !== id) });
+      notify(`${gymName} removed from comparison.`, 'info');
+    } else if (selected.length < 3) {
+      setComparison({ owner: user.id, ids: [...selected, id] });
+      notify(`${gymName} added to comparison.`);
+    } else notify('You can compare up to 3 gyms. Remove one to add another.', 'error');
   }
 
   return <CompareContext.Provider value={{ selected, toggle }}>
@@ -52,6 +64,9 @@ function AppRoutes() {
         <Route path="/trainers" element={<Trainers />} />
         <Route path="/trainers/:id" element={<TrainerDetail />} />
         <Route path="/trainer/dashboard" element={<MemberGate title="Your trainer space."><TrainerDashboard /></MemberGate>} />
+        <Route path="/admin" element={<MemberGate title="Admin dashboard."><AdminDashboard /></MemberGate>} />
+        <Route path="/admin/trainers" element={<MemberGate title="Admin dashboard."><AdminDashboard initialSection="trainers" /></MemberGate>} />
+        <Route path="/admin/inquiries" element={<MemberGate title="Admin dashboard."><AdminDashboard initialSection="inquiries" /></MemberGate>} />
         <Route path="/plans" element={<Plans />} />
         <Route path="/login" element={<AuthPage key="login" />} />
         <Route path="/signup" element={<AuthPage key="signup" mode="signup" />} />
@@ -62,10 +77,9 @@ function AppRoutes() {
       </Routes>
     </main>
     <Footer />
-    {notice && <div className="toast" role="alert">{notice}<button aria-label="Dismiss" onClick={() => setNotice('')}><X size={18} /></button></div>}
   </CompareContext.Provider>;
 }
 
 export default function App() {
-  return <GymsProvider><AuthProvider><SavedProvider><AppRouter><AppRoutes /></AppRouter></SavedProvider></AuthProvider></GymsProvider>;
+  return <ToastProvider><GymsProvider><AuthProvider><SavedProvider><AppRouter><AppRoutes /></AppRouter></SavedProvider></AuthProvider></GymsProvider></ToastProvider>;
 }

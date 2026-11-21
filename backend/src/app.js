@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import express from 'express';
-import Stripe from 'stripe';
 
 const API_PREFIX = '/api/v1';
 const GYM_SELECT = `
@@ -47,8 +47,86 @@ function userSupabase(accessToken) {
   return createSupabase(requiredEnv('SUPABASE_ANON_KEY'), accessToken);
 }
 
-function stripeClient() {
-  return new Stripe(requiredEnv('STRIPE_SECRET_KEY'));
+function paymongoSecretKey() {
+  return requiredEnv('PAYMONGO_SECRET_KEY');
+}
+
+function inquiryEmailConfig() {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const from = process.env.RESEND_FROM_EMAIL?.trim();
+  const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL?.trim();
+  return { apiKey, from, adminEmail, enabled: Boolean(apiKey && from) };
+}
+
+async function sendInquiryEmail(to, subject, text) {
+  const { apiKey, from, enabled } = inquiryEmailConfig();
+  if (!enabled || !to) return false;
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to: [to], subject, text }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.message || `Email provider returned HTTP ${response.status}.`);
+  }
+  return true;
+}
+
+async function sendInquiryEmails(messages, logger) {
+  const results = await Promise.all(messages.map(async ({ to, subject, text, label }) => {
+    if (!to) return { label, sent: false };
+    try {
+      return { label, sent: await sendInquiryEmail(to, subject, text) };
+    } catch (error) {
+      logger.error?.(`Gym inquiry ${label} email failed: ${error.message}`);
+      return { label, sent: false };
+    }
+  }));
+  return Object.fromEntries(results.map(({ label, sent }) => [label, sent]));
+}
+
+const inquiryStatusCopy = {
+  pending: { subject: 'We received your GYMIFY gym inquiry', message: 'Your gym inquiry has been received. Our team will review it and contact you with updates.' },
+  under_review: { subject: 'Your GYMIFY gym inquiry is under review', message: 'Our team has started reviewing your gym inquiry. We will contact you when there is another update.' },
+  approved: { subject: 'Your GYMIFY gym inquiry was approved', message: 'Your gym partnership inquiry has been approved. Our team will contact you with the next steps for updating or creating your listing.' },
+  declined: { subject: 'Update on your GYMIFY gym inquiry', message: 'Our team has completed its review of your gym inquiry. Please reply to this email if you would like more information or want to discuss it further.' },
+};
+
+async function paymongoRequest(path, { method = 'GET', body, idempotencyKey } = {}) {
+  const headers = {
+    Authorization: `Basic ${Buffer.from(`${paymongoSecretKey()}:`).toString('base64')}`,
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  };
+  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+  const response = await fetch(`https://api.paymongo.com${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const details = payload?.errors?.map((item) => item.detail || item.code).filter(Boolean).join('; ');
+    const error = new Error(details || `PayMongo returned HTTP ${response.status}.`);
+    error.status = response.status;
+    throw error;
+  }
+  return payload;
+}
+
+function verifyPaymongoSignature(rawBody, signatureHeader, secret, liveMode) {
+  if (!signatureHeader || !Buffer.isBuffer(rawBody)) return false;
+  const parts = new Map(signatureHeader.split(',').map((part) => {
+    const separator = part.indexOf('=');
+    return separator < 0 ? ['', ''] : [part.slice(0, separator).trim(), part.slice(separator + 1).trim()];
+  }));
+  const timestamp = parts.get('t');
+  const signature = parts.get(liveMode ? 'li' : 'te');
+  if (!timestamp || !signature || !/^[a-f0-9]{64}$/i.test(signature)) return false;
+  const expected = createHmac('sha256', secret).update(`${timestamp}.${rawBody.toString('utf8')}`).digest();
+  const actual = Buffer.from(signature, 'hex');
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
 function parseList(parameters, key, maxItems) {
@@ -245,7 +323,7 @@ export function createApp({ logger = console } = {}) {
       response.vary('Origin');
     }
     response.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    response.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Stripe-Signature');
+    response.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Paymongo-Signature');
     response.set('X-Content-Type-Options', 'nosniff');
     response.set('Referrer-Policy', 'strict-origin-when-cross-origin');
     if (request.method === 'OPTIONS') {
@@ -257,46 +335,39 @@ export function createApp({ logger = console } = {}) {
 
   app.post(`${API_PREFIX}/billing/webhook`, express.raw({ type: 'application/json', limit: '1mb' }), async (request, response) => {
     try {
-      const signature = request.get('stripe-signature');
-      if (!signature) throw new RequestError(400, 'INVALID_SIGNATURE', 'Stripe signature is required.');
-      const stripe = stripeClient();
-      const event = stripe.webhooks.constructEvent(request.body, signature, requiredEnv('STRIPE_WEBHOOK_SECRET'));
-      let subscription;
-      let userId;
-      if (event.type === 'checkout.session.completed') {
-        const session = event.data.object;
-        userId = session.metadata?.user_id;
-        if (session.subscription) {
-          const subscriptionId = typeof session.subscription === 'string'
-            ? session.subscription
-            : session.subscription.id;
-          subscription = await stripe.subscriptions.retrieve(subscriptionId);
-        }
-      } else if (event.type.startsWith('customer.subscription.')) {
-        const eventSubscription = event.data.object;
-        subscription = await stripe.subscriptions.retrieve(eventSubscription.id);
-        userId = subscription.metadata?.user_id;
-      } else {
+      const signature = request.get('paymongo-signature');
+      const secretKey = paymongoSecretKey();
+      const webhookSecret = requiredEnv('PAYMONGO_WEBHOOK_SECRET');
+      const liveEnvironment = secretKey.startsWith('sk_live_');
+      if (!verifyPaymongoSignature(request.body, signature, webhookSecret, liveEnvironment)) {
+        throw new RequestError(400, 'INVALID_SIGNATURE', 'PayMongo webhook signature is invalid.');
+      }
+      let event;
+      try {
+        event = JSON.parse(request.body.toString('utf8'));
+      } catch {
+        throw new RequestError(400, 'INVALID_EVENT', 'PayMongo webhook payload is invalid.');
+      }
+      const eventAttributes = event?.data?.attributes;
+      const liveMode = eventAttributes?.livemode === true;
+      if (liveMode !== liveEnvironment) {
         response.json({ received: true });
         return;
       }
-
-      if (!userId || !subscription) {
-        logger.error('Stripe event is missing its Gymify user or subscription:', event.id);
-        sendError(response, 400, 'INVALID_EVENT', 'The subscription event is missing required metadata.');
+      if (eventAttributes?.type !== 'checkout_session.payment.paid') {
+        response.json({ received: true });
         return;
       }
-      const { error } = await adminSupabase().rpc('sync_stripe_subscription', {
-        p_event_id: event.id,
-        p_user_id: userId,
-        p_customer_id: typeof subscription.customer === 'string'
-          ? subscription.customer
-          : subscription.customer.id,
-        p_subscription_id: subscription.id,
-        p_subscription_created: subscription.created,
-        p_status: subscription.status,
-        p_current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-        p_event_created: event.created,
+      const checkoutSession = eventAttributes.data;
+      const purchaseId = checkoutSession?.attributes?.reference_number;
+      const checkoutSessionId = checkoutSession?.id;
+      if (!event.data.id || !validUuid(purchaseId) || !checkoutSessionId) {
+        throw new RequestError(400, 'INVALID_EVENT', 'PayMongo payment event is missing its purchase reference.');
+      }
+      const { error } = await adminSupabase().rpc('sync_paymongo_purchase', {
+        p_event_id: event.data.id,
+        p_purchase_id: purchaseId,
+        p_checkout_session_id: checkoutSessionId,
       });
       if (error) throw error;
       response.json({ received: true });
@@ -305,8 +376,8 @@ export function createApp({ logger = console } = {}) {
         sendError(response, error.status, error.code, error.message);
         return;
       }
-      logger.error('Stripe webhook failed:', error);
-      sendError(response, 400, 'WEBHOOK_FAILED', 'Stripe webhook could not be processed.');
+      logger.error('PayMongo webhook failed:', error);
+      sendError(response, 500, 'WEBHOOK_FAILED', 'PayMongo webhook could not be processed.');
     }
   });
 
@@ -458,17 +529,36 @@ export function createApp({ logger = console } = {}) {
         return;
       }
       if (body.consent !== true) throw new RequestError(400, 'CONSENT_REQUIRED', 'Consent is required to submit this inquiry.');
-      const { error } = await publicSupabase().rpc('submit_gym_partner_inquiry', {
-        p_gym_name: validateString(body.gymName, 'Gym name', 120),
-        p_contact_name: validateString(body.contactName, 'Contact name', 80),
-        p_email: body.email.trim().toLocaleLowerCase(),
-        p_phone: validateString(body.phone, 'Phone', 30, { optional: true }),
-        p_location: validateString(body.location, 'Location', 250),
-        p_message: validateString(body.message, 'Message', 2000, { optional: true }),
+      const inquiry = {
+        gymName: validateString(body.gymName, 'Gym name', 120),
+        contactName: validateString(body.contactName, 'Contact name', 80),
+        email: body.email.trim().toLocaleLowerCase(),
+        phone: validateString(body.phone, 'Phone', 30, { optional: true }),
+        location: validateString(body.location, 'Location', 250),
+        message: validateString(body.message, 'Message', 2000, { optional: true }),
+      };
+      const { data: inquiryId, error } = await publicSupabase().rpc('submit_gym_partner_inquiry', {
+        p_gym_name: inquiry.gymName,
+        p_contact_name: inquiry.contactName,
+        p_email: inquiry.email,
+        p_phone: inquiry.phone,
+        p_location: inquiry.location,
+        p_message: inquiry.message,
         p_consent: body.consent === true,
       });
       if (error) throw mapDatabaseError(error);
-      response.status(201).json({ data: {} });
+      const adminEmail = inquiryEmailConfig().adminEmail;
+      const emailDelivery = await sendInquiryEmails([
+        {
+          label: 'owner', to: inquiry.email, subject: inquiryStatusCopy.pending.subject,
+          text: `Hello ${inquiry.contactName},\n\n${inquiryStatusCopy.pending.message}\n\nGym: ${inquiry.gymName}\nReference: ${inquiryId || 'submitted'}\n\nGYMIFY`,
+        },
+        {
+          label: 'admin', to: adminEmail, subject: `New gym partnership inquiry: ${inquiry.gymName}`,
+          text: `A new gym partnership inquiry was submitted.\n\nGym: ${inquiry.gymName}\nContact: ${inquiry.contactName}\nEmail: ${inquiry.email}\nPhone: ${inquiry.phone || 'Not provided'}\nLocation: ${inquiry.location}\nMessage: ${inquiry.message || 'No message provided.'}\nReference: ${inquiryId || 'submitted'}\n\nReview it in the GYMIFY admin dashboard.`,
+        },
+      ], logger);
+      response.status(201).json({ data: { id: inquiryId, emailDelivery } });
     } catch (error) {
       sendSupabaseError(error, response, logger, 'Could not submit partnership inquiry');
     }
@@ -477,6 +567,39 @@ export function createApp({ logger = console } = {}) {
   app.use(`${API_PREFIX}/me`, authenticate);
   app.use(`${API_PREFIX}/billing`, authenticate);
   app.use(`${API_PREFIX}/admin`, authenticate);
+
+  app.get(`${API_PREFIX}/admin/trainers`, async (request, response) => {
+    try {
+      if (request.profile.role !== 'admin') throw new RequestError(403, 'ROLE_REQUIRED', 'Admin account required.');
+      const { data, error } = await adminSupabase().from('trainer_profiles')
+        .select('user_id,display_name,bio,specialties,service_areas,avatar_url,verification_status,is_active,updated_at')
+        .order('updated_at', { ascending: false }).limit(300);
+      if (error) throw error;
+      response.json({ data: data || [] });
+    } catch (error) {
+      sendSupabaseError(error, response, logger, 'Could not load trainer reviews');
+    }
+  });
+
+  app.patch(`${API_PREFIX}/admin/trainers/:id`, async (request, response) => {
+    try {
+      if (request.profile.role !== 'admin') throw new RequestError(403, 'ROLE_REQUIRED', 'Admin account required.');
+      if (!validUuid(request.params.id)) throw new RequestError(400, 'INVALID_TRAINER_ID', 'Trainer ID is invalid.');
+      const status = request.body?.status;
+      if (!['approved', 'rejected'].includes(status)) {
+        throw new RequestError(400, 'INVALID_INPUT', 'Trainer review status must be approved or rejected.');
+      }
+      const { data, error } = await adminSupabase().from('trainer_profiles')
+        .update({ verification_status: status })
+        .eq('user_id', request.params.id)
+        .select('user_id,display_name,verification_status,updated_at').maybeSingle();
+      if (error) throw error;
+      if (!data) throw new RequestError(404, 'TRAINER_NOT_FOUND', 'No trainer profile was found.');
+      response.json({ data });
+    } catch (error) {
+      sendSupabaseError(error, response, logger, 'Could not update trainer review');
+    }
+  });
 
   app.get(`${API_PREFIX}/admin/partnership-inquiries`, async (request, response) => {
     try {
@@ -496,16 +619,23 @@ export function createApp({ logger = console } = {}) {
       if (request.profile.role !== 'admin') throw new RequestError(403, 'ROLE_REQUIRED', 'Admin account required.');
       if (!validUuid(request.params.id)) throw new RequestError(400, 'INVALID_INQUIRY_ID', 'Inquiry ID is invalid.');
       const status = request.body?.status;
-      if (!['pending', 'approved', 'declined'].includes(status)) {
-        throw new RequestError(400, 'INVALID_INPUT', 'Inquiry status must be pending, approved, or declined.');
+      if (!['pending', 'under_review', 'approved', 'declined'].includes(status)) {
+        throw new RequestError(400, 'INVALID_INPUT', 'Inquiry status must be pending, under_review, approved, or declined.');
       }
+      const { data: previous, error: lookupError } = await request.db.from('gym_partner_inquiries')
+        .select('id,gym_name,contact_name,email,status').eq('id', request.params.id).maybeSingle();
+      if (lookupError) throw lookupError;
+      if (!previous) throw new RequestError(404, 'INQUIRY_NOT_FOUND', 'No partnership inquiry was found.');
       const { data, error } = await request.db.from('gym_partner_inquiries')
         .update({ status, reviewed_at: status === 'pending' ? null : new Date().toISOString() })
         .eq('id', request.params.id)
-        .select('id,status,reviewed_at').maybeSingle();
+        .select('id,status,reviewed_at').single();
       if (error) throw error;
-      if (!data) throw new RequestError(404, 'INQUIRY_NOT_FOUND', 'No partnership inquiry was found.');
-      response.json({ data });
+      const emailDelivery = previous.status === status ? { owner: false } : await sendInquiryEmails([{
+        label: 'owner', to: previous.email, subject: inquiryStatusCopy[status].subject,
+        text: `Hello ${previous.contact_name},\n\n${inquiryStatusCopy[status].message}\n\nGym: ${previous.gym_name}\nReference: ${previous.id}\n\nGYMIFY`,
+      }], logger);
+      response.json({ data: { ...data, emailDelivery } });
     } catch (error) {
       sendSupabaseError(error, response, logger, 'Could not update partnership inquiry');
     }
@@ -541,6 +671,11 @@ export function createApp({ logger = console } = {}) {
       const { data: subscription, error } = await request.db
         .from('subscriptions').select('tier,status,current_period_end').eq('user_id', request.profile.id).maybeSingle();
       if (error) throw error;
+      const membership = subscription;
+      const premiumCurrent = membership?.tier === 'premium'
+        && membership.status === 'active'
+        && membership.current_period_end
+        && new Date(membership.current_period_end).getTime() > Date.now();
       response.json({ data: {
         user: {
           id: request.profile.id,
@@ -548,7 +683,9 @@ export function createApp({ logger = console } = {}) {
           email: request.authUser.email,
           role: request.profile.role,
         },
-        subscription: subscription || { tier: 'free', status: 'free', current_period_end: null },
+        subscription: premiumCurrent
+          ? membership
+          : { tier: 'free', status: 'free', current_period_end: null },
       } });
     } catch (error) {
       sendSupabaseError(error, response, logger, 'Could not load account');
@@ -852,74 +989,50 @@ export function createApp({ logger = console } = {}) {
   app.post(`${API_PREFIX}/billing/checkout`, async (request, response) => {
     try {
       if (request.profile.role !== 'gym_goer') throw new RequestError(403, 'ROLE_REQUIRED', 'A gym-goer account is required for Premium.');
-      const [subscriptionResult, admin] = await Promise.all([
-        request.db.from('subscriptions').select('tier,status,stripe_customer_id')
-          .eq('user_id', request.profile.id).maybeSingle(),
-        Promise.resolve(adminSupabase()),
-      ]);
-      if (subscriptionResult.error) throw subscriptionResult.error;
-      if (subscriptionResult.data?.tier === 'premium'
-        && ['active', 'trialing'].includes(subscriptionResult.data.status)) {
-        throw new RequestError(409, 'ALREADY_PREMIUM', 'Your account already has an active Premium subscription.');
-      }
-      const stripe = stripeClient();
-      const price = await stripe.prices.retrieve(requiredEnv('STRIPE_PREMIUM_PRICE_ID'));
-      if (!price.active || price.currency !== 'php' || price.unit_amount !== 17500
-        || price.recurring?.interval !== 'month' || price.recurring.interval_count !== 1) {
-        throw new RequestError(503, 'PRICE_MISCONFIGURED', 'Premium pricing is not configured for ₱175 per month.');
-      }
-      let customerId = subscriptionResult.data?.stripe_customer_id;
-      if (!customerId) {
-        const customer = await stripe.customers.create({
-          email: request.authUser.email,
-          name: request.profile.display_name,
-          metadata: { user_id: request.profile.id },
-        }, { idempotencyKey: `gymify-customer-${request.profile.id}` });
-        customerId = customer.id;
-        const { error } = await admin.from('subscriptions')
-          .update({ stripe_customer_id: customerId }).eq('user_id', request.profile.id);
-        if (error) throw error;
-      }
-      const existingSubscriptions = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 100 });
-      if (existingSubscriptions.data.some((subscription) => !['canceled', 'incomplete_expired'].includes(subscription.status))) {
-        throw new RequestError(409, 'ALREADY_PREMIUM', 'Your account already has an active Premium subscription.');
-      }
+      const admin = adminSupabase();
+      const purchaseId = randomUUID();
+      const { error: purchaseError } = await admin.from('paymongo_purchases').insert({
+        id: purchaseId,
+        user_id: request.profile.id,
+        status: 'pending',
+      });
+      if (purchaseError) throw purchaseError;
+
       const baseUrl = requiredEnv('APP_BASE_URL').replace(/\/+$/, '');
-      const session = await stripe.checkout.sessions.create({
-        mode: 'subscription',
-        customer: customerId,
-        line_items: [{ price: requiredEnv('STRIPE_PREMIUM_PRICE_ID'), quantity: 1 }],
-        success_url: `${baseUrl}/plans?checkout=success`,
-        cancel_url: `${baseUrl}/plans?checkout=cancelled`,
-        client_reference_id: request.profile.id,
-        metadata: { user_id: request.profile.id },
-        subscription_data: { metadata: { user_id: request.profile.id } },
-        allow_promotion_codes: false,
-      }, { idempotencyKey: `gymify-checkout-${request.profile.id}-${Math.floor(Date.now() / 60000)}` });
-      response.json({ data: { url: session.url } });
+      let checkout;
+      try {
+        checkout = await paymongoRequest('/v2/checkout_sessions', {
+          method: 'POST',
+          idempotencyKey: `gymify-premium-${purchaseId}`,
+          body: { data: { attributes: {
+            line_items: [{ currency: 'PHP', amount: 17500, name: 'GYMIFY Premium · 30 days', quantity: 1 }],
+            payment_method_types: ['gcash', 'card', 'paymaya', 'qrph'],
+            success_url: `${baseUrl}/plans?checkout=success`,
+            cancel_url: `${baseUrl}/plans?checkout=cancelled`,
+            reference_number: purchaseId,
+            send_email_receipt: true,
+            metadata: { user_id: request.profile.id, purchase_id: purchaseId },
+          } } },
+        });
+      } catch (providerError) {
+        logger.error('PayMongo checkout creation failed:', providerError);
+        throw new RequestError(502, 'PAYMENT_CHECKOUT_FAILED', 'PayMongo could not start checkout. Check that your PayMongo account and payment methods are enabled, then try again.');
+      }
+      const checkoutSession = checkout?.data;
+      const checkoutUrl = checkoutSession?.attributes?.checkout_url;
+      if (!checkoutSession?.id || !checkoutUrl || !URL.canParse(checkoutUrl)
+        || new URL(checkoutUrl).hostname !== 'checkout.paymongo.com') {
+        throw new RequestError(502, 'INVALID_CHECKOUT_RESPONSE', 'PayMongo returned an invalid checkout link. Please try again.');
+      }
+      const { error: updateError } = await admin.from('paymongo_purchases')
+        .update({ checkout_session_id: checkoutSession.id })
+        .eq('id', purchaseId);
+      if (updateError) throw updateError;
+      response.json({ data: { url: checkoutUrl } });
     } catch (error) {
       sendSupabaseError(error, response, logger, 'Could not start Premium checkout');
     }
   });
-
-  app.post(`${API_PREFIX}/billing/portal`, async (request, response) => {
-    try {
-      const { data, error } = await request.db.from('subscriptions')
-        .select('stripe_customer_id').eq('user_id', request.profile.id).maybeSingle();
-      if (error) throw error;
-      if (!data?.stripe_customer_id) throw new RequestError(404, 'NO_BILLING_ACCOUNT', 'No billing account was found.');
-      const stripe = stripeClient();
-      const baseUrl = requiredEnv('APP_BASE_URL').replace(/\/+$/, '');
-      const session = await stripe.billingPortal.sessions.create({
-        customer: data.stripe_customer_id,
-        return_url: `${baseUrl}/plans`,
-      });
-      response.json({ data: { url: session.url } });
-    } catch (error) {
-      sendSupabaseError(error, response, logger, 'Could not open billing portal');
-    }
-  });
-
   app.use((request, response) => {
     if (request.method === 'GET') {
       sendError(response, 404, 'NOT_FOUND', 'The requested API route was not found.');

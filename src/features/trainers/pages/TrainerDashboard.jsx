@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { memberRequest } from '../../../services/memberApi';
+import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../auth/context/AuthContext';
 
 const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -15,6 +16,19 @@ export default function TrainerDashboard() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState('');
+  const [removeAvatar, setRemoveAvatar] = useState(false);
+
+  useEffect(() => {
+    if (!avatarFile) {
+      setAvatarPreview('');
+      return undefined;
+    }
+    const previewUrl = URL.createObjectURL(avatarFile);
+    setAvatarPreview(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [avatarFile]);
 
   const load = useCallback(async () => {
     const [trainerProfile, trainerRequests] = await Promise.all([
@@ -40,7 +54,10 @@ export default function TrainerDashboard() {
   }, [user.id]);
 
   useEffect(() => {
-    load().catch((requestError) => setError(requestError.message || 'Could not load your trainer dashboard.'));
+    load().catch((requestError) => {
+      const message = requestError.message || 'Could not load your trainer dashboard. Please try again.';
+      setError(message);
+    });
   }, [load]);
 
   async function saveProfile(event) {
@@ -48,18 +65,38 @@ export default function TrainerDashboard() {
     const form = Object.fromEntries(new FormData(event.currentTarget));
     setNotice('');
     if (slots.some((slot) => Boolean(slot.startsAt) !== Boolean(slot.endsAt))) {
-      setError('Choose both a start and end time for each availability day.');
+      const message = 'Choose both a start and end time for each availability day.';
+      setError(message);
       return;
     }
     setBusy(true);
     setError('');
     setNotice('');
+    const photoChanged = Boolean(avatarFile || removeAvatar);
     try {
+      let avatarUrl = removeAvatar ? '' : profile.avatar_url || '';
+      if (avatarFile) {
+        if (!supabase) throw new Error('Image upload is unavailable because Supabase is not configured.');
+        const path = `${user.id}/avatar`;
+        const { error: uploadError } = await supabase.storage.from('trainer-avatars').upload(path, avatarFile, {
+          upsert: true,
+          contentType: avatarFile.type,
+          cacheControl: '3600',
+        });
+        if (uploadError) {
+          if (/bucket not found/i.test(uploadError.message || '')) {
+            throw new Error('Photo storage is not set up yet. In Supabase SQL Editor, run the migration supabase/migrations/20261117000000_trainer_avatar_storage.sql, then try again.');
+          }
+          throw new Error(`Could not upload profile photo: ${uploadError.message}`);
+        }
+        const { data } = supabase.storage.from('trainer-avatars').getPublicUrl(path);
+        avatarUrl = data.publicUrl;
+      }
       await memberRequest('/me/trainer-profile', { method: 'PUT', body: {
         bio: form.bio,
         specialties: form.specialties.split(',').map((item) => item.trim()).filter(Boolean),
         serviceAreas: form.serviceAreas.split(',').map((item) => item.trim()).filter(Boolean),
-        avatarUrl: form.avatarUrl.trim(),
+        avatarUrl,
       } });
       await memberRequest('/me/trainer-contact', { method: 'PUT', body: contact });
       await memberRequest('/me/trainer-availability', { method: 'PUT', body: {
@@ -67,9 +104,14 @@ export default function TrainerDashboard() {
           .map(({ weekday, startsAt, endsAt, timezone }) => ({ weekday, startsAt, endsAt, timezone })),
       } });
       await load();
-      setNotice('Your profile and weekly availability were saved.');
+      setAvatarFile(null);
+      setRemoveAvatar(false);
+      setNotice(photoChanged
+        ? 'Your trainer profile, photo, contact details, and weekly availability were saved.'
+        : 'Your trainer profile, contact details, and weekly availability were saved.');
     } catch (requestError) {
-      setError(requestError.message || 'Could not save your profile.');
+      const message = requestError.message || 'Could not save your profile. Please try again.';
+      setError(message);
     } finally {
       setBusy(false);
     }
@@ -84,7 +126,8 @@ export default function TrainerDashboard() {
       await load();
       setNotice(`Request ${status}.`);
     } catch (requestError) {
-      setError(requestError.message || 'Could not update request.');
+      const message = requestError.message || 'Could not update request. Please try again.';
+      setError(message);
     } finally {
       setBusy(false);
     }
@@ -108,7 +151,43 @@ export default function TrainerDashboard() {
       <label>Bio<textarea name="bio" rows={4} maxLength={2000} defaultValue={profile.bio} /></label>
       <label>Specialties <span className="optional">(comma separated)</span><input name="specialties" maxLength={1200} defaultValue={profile.specialties.join(', ')} /></label>
       <label>Service areas <span className="optional">(comma separated)</span><input name="serviceAreas" maxLength={1200} defaultValue={profile.service_areas.join(', ')} /></label>
-      <label>Profile image URL <span className="optional">(optional)</span><input name="avatarUrl" type="url" maxLength={2048} defaultValue={profile.avatar_url || ''} /></label>
+      <div className="trainer-avatar-upload">
+        <span className="field-label">Profile photo <span className="optional">(optional)</span></span>
+        <div className="avatar-upload-card">
+          <div className="avatar-upload-preview-wrap">
+            {(avatarPreview || (!removeAvatar && profile.avatar_url))
+              ? <img className="trainer-avatar-preview" src={avatarPreview || profile.avatar_url} alt="Profile photo preview" />
+              : <div className="trainer-avatar-placeholder" aria-hidden="true">{user?.user_metadata?.full_name?.slice(0, 1)?.toUpperCase() || '＋'}</div>}
+          </div>
+          <div className="avatar-upload-copy">
+            <strong>{avatarFile ? 'Photo ready to upload' : profile.avatar_url && !removeAvatar ? 'Your profile photo' : 'Add a profile photo'}</strong>
+            <span>{avatarFile ? avatarFile.name : 'Choose a clear photo so gym-goers can recognize you.'}</span>
+          </div>
+          <label className="avatar-file-picker">
+            <span>{avatarFile ? 'Choose a different photo' : 'Choose photo'}</span>
+            <input className="avatar-file-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+              setError('Choose a JPG, PNG, or WebP image.');
+              event.target.value = '';
+              return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+              setError('Profile photos must be 5 MB or smaller.');
+              event.target.value = '';
+              return;
+            }
+            setError('');
+            setRemoveAvatar(false);
+            setAvatarFile(file);
+          }} />
+          </label>
+          {profile.avatar_url && !removeAvatar && <button type="button" className="avatar-remove-button" onClick={() => { setAvatarFile(null); setRemoveAvatar(true); }}>Remove photo</button>}
+          {removeAvatar && <span className="avatar-remove-note">Photo will be removed when you save.</span>}
+          <small>JPG, PNG, or WebP · Up to 5 MB</small>
+        </div>
+      </div>
       <h2>Private contact and availability</h2>
       <p>These details are shown only to gym-goers whose connection requests you accept.</p>
       <label>Preferred contact

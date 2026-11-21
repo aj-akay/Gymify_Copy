@@ -27,7 +27,12 @@ export function SavedProvider({ children }) {
         if (!Array.isArray(data.gymIds)) throw new Error('Invalid saved gym response.');
         if (!controller.signal.aborted) { setSavedIds(data.gymIds); setLoadedUser(user.id); }
       })
-      .catch(e => { if (e.name !== 'AbortError') setError('Could not load saved gyms. Please retry.'); })
+      .catch(e => {
+        if (e.name !== 'AbortError') {
+          const message = e.message || 'Could not load saved gyms. Please retry.';
+          setError(message);
+        }
+      })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [user?.id, revision]);

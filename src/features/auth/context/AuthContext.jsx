@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { memberApiEnabled, memberRequest } from '../../../services/memberApi';
 import { supabase } from '../../../lib/supabase';
+import { useToast } from '../../../shared/contexts/ToastContext';
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
@@ -13,6 +14,7 @@ function authRedirectUrl(path) {
 }
 
 export function AuthProvider({ children }) {
+  const notify = useToast();
   const [user, setUser] = useState(null);
   const [subscription, setSubscription] = useState({ tier: 'free', status: 'free', current_period_end: null });
   const [loading, setLoading] = useState(memberApiEnabled);
@@ -40,7 +42,11 @@ export function AuthProvider({ children }) {
         await refreshAccount(session.access_token);
         if (active) setError('');
       } catch (e) {
-        if (active && e.name !== 'AbortError') setError('Could not load your account. Please sign in again.');
+        if (active && e.name !== 'AbortError') {
+          const message = e.message || 'Could not load your account. Please sign in again.';
+          setError(message);
+          notify(message, 'error');
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -52,7 +58,11 @@ export function AuthProvider({ children }) {
       if (sessionError) throw sessionError;
       return load(data.session);
     }).catch((e) => {
-      if (active) setError('Could not check your session. Please sign in again.');
+      if (active) {
+        const message = 'Could not check your session. Please sign in again.';
+        setError(message);
+        notify(message, 'error');
+      }
       console.error('Could not restore the GYMIFY session:', e);
       if (active) setLoading(false);
     });
@@ -60,7 +70,7 @@ export function AuthProvider({ children }) {
       active = false;
       authSubscription.unsubscribe();
     };
-  }, [refreshAccount]);
+  }, [refreshAccount, notify]);
 
   async function login(email, password) {
     if (!supabase) throw new Error('Set the Supabase URL and public key to connect account services.');

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { memberApiEnabled, safeReturnPath } from '../../../services/memberApi';
 
@@ -11,6 +12,7 @@ export default function AuthPage({ mode = 'login' }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const signup = mode === 'signup';
   const recovery = mode === 'recovery';
   const newPassword = mode === 'new-password';
@@ -43,15 +45,20 @@ export default function AuthPage({ mode = 'login' }) {
         });
         setMessage('Registration received. Check your email to verify your account, then sign in.');
         event.target.reset();
-      } else await login(values.email, values.password);
-    } catch (e) { setError(e.message || 'Could not complete your request. Please try again.'); }
+      } else {
+        await login(values.email, values.password);
+      }
+    } catch (e) {
+      const errorMessage = e.message || 'Could not complete your request. Please try again.';
+      setError(errorMessage);
+    }
     finally { setBusy(false); }
   }
 
   return <div className="container page auth-layout">
     <div className="auth-intro"><span className="eyebrow">YOUR CITY. YOUR SHORTLIST.</span><h1>{title}</h1>
-      <p>A Free account lets you save gyms and discover trainers. Premium adds more trainer connection and session requests.</p>
-      <Link className="text-link" to="/gyms">Explore gyms without an account ?</Link>
+      <p>A free account lets you save gyms and discover trainers. Premium adds more trainer connection and session requests.</p>
+      <Link className="text-link" to="/gyms">Explore gyms without an account <span aria-hidden="true">→</span></Link>
     </div>
     <section className="form-panel" aria-labelledby="auth-title">
       <h2 id="auth-title">{signup ? 'Create an account' : newPassword ? 'Choose a new password' : recovery ? 'Reset your password' : 'Sign in'}</h2>
@@ -65,7 +72,15 @@ export default function AuthPage({ mode = 'login' }) {
           </select>
         </label>}
         {!newPassword && <label>Email address<input type="email" name="email" autoComplete="email" required maxLength={254} /></label>}
-        {!recovery && <label>{newPassword ? 'New password' : 'Password'}<input type="password" name="password" autoComplete={signup || newPassword ? 'new-password' : 'current-password'} required minLength={signup || newPassword ? 8 : undefined} maxLength={128} />{(signup || newPassword) && <small>Use at least 8 characters.</small>}</label>}
+        {!recovery && <label>{newPassword ? 'New password' : 'Password'}
+          <span className="password-input-wrap">
+            <input type={showPassword ? 'text' : 'password'} name="password" autoComplete={signup || newPassword ? 'new-password' : 'current-password'} required minLength={signup || newPassword ? 8 : undefined} maxLength={128} />
+            <button className="password-visibility-toggle" type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} onClick={() => setShowPassword((visible) => !visible)}>
+              {showPassword ? <EyeOff size={19} aria-hidden="true" /> : <Eye size={19} aria-hidden="true" />}
+            </button>
+          </span>
+          {(signup || newPassword) && <small>Use at least 8 characters.</small>}
+        </label>}
         {error && <p className="form-error" role="alert">{error}</p>}
         {message && <p className="form-success" role="status">{message}</p>}
         <button className="button" disabled={busy || !memberApiEnabled || (newPassword && !user)} type="submit">{busy ? 'Please wait...' : !memberApiEnabled ? 'Account service not configured' : signup ? 'Create account' : newPassword ? 'Update password' : recovery ? 'Send reset instructions' : 'Sign in'}</button>
